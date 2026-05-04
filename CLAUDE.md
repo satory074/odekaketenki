@@ -62,7 +62,22 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 
 ## デプロイ
 
-GitHub Pages (`gh-pages` 環境)。`.github/workflows/deploy.yml` が `main` push をトリガに `NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build` → `actions/deploy-pages` で配信。CSP は `app/layout.tsx` の `<meta http-equiv="Content-Security-Policy">` で実装（GitHub Pages はカスタムヘッダー不可のため）。
+- 本番URL: **https://satory074.github.io/odekaketenki/**
+- リポジトリ: https://github.com/satory074/odekaketenki
+
+`.github/workflows/deploy.yml` が `main` push をトリガに `NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build` → `actions/deploy-pages` で配信。CSP は `app/layout.tsx` の `<meta http-equiv="Content-Security-Policy">` で実装（GitHub Pages はカスタムヘッダー不可のため）。Pages の Source は「GitHub Actions」を選択する設定（branch deploy ではない）。
+
+## 可視化レイヤ
+
+- **`components/CompareCards.tsx`** — 候補日 1件 = 1カードの md:2列グリッド。展開状態は `useState<Set<string>>` でカード ID（日付文字列）を保持。最初のカードはデフォルト展開。
+- **`components/DateDetailPanel.tsx`** — カード展開時に下に挿入される詳細パネル。5チャートを縦に並べ、末尾に `<details>` で平均値テーブル + サンプル数バナー。
+- **`components/charts/*`** — 依存ゼロの純 SVG プリミティブ 5種:
+  - `BarMeter` (横バー + 中/高リスク閾値ティック)
+  - `RibbonBand` (P10–P90帯 + P25–P75 濃色 + P50中央線、気温/風速)
+  - `StackedShareBar` (晴れ/小雨/雨/大雨の100%スタック)
+  - `YearHeatmap` (30年分のセル、年ごとの雨日数で indigo の濃淡)
+  - `OffsetSparkline` (±7日 tmax/tmin もしくは雨日割合)
+- 配色は **heat=橙 / cold=青 / rain=indigo / wind=紫** で固定（赤緑コンフリクト回避）。総合スコアの帯背景のみ emerald/amber/rose（独立指標なので OK）。
 
 ## 重要な設計判断
 
@@ -80,12 +95,20 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 
 ## 非自明な実装ポイント
 
-- **`lib/aggregate.ts`** — ±7日のキー計算は閏年を避けるため `2001` を基準年に固定して date math。集計結果は欠損値を除外して算術平均、`n` でサンプル数を返す（UIで表示）。
+- **`lib/aggregate.ts`** — ±7日のキー計算は閏年を避けるため `2001` を基準年に固定して date math。集計結果は欠損値を除外して算術平均、`n` でサンプル数を返す。1パスのループで全集計を行うため、`tmaxDist` 等の percentile 計算用配列も同時に貯める。
+- **`lib/types.ts` の `Aggregated`** — 平均値（`avgTmax` 等）の他に **チャート用フィールド**を多数保持:
+  - `tmaxDist / tminDist / windDist` — `Percentiles` (P10/P25/P50/P75/P90)
+  - `rainShare` — `{none, light, moderate, heavy}` の比率（晴れ <1mm, 小雨 1-10mm, 雨 10-30mm, 大雨 ≥30mm）
+  - `byYear` — `YearOutcome[]`（30件、年次の雨日数・最大雨量・気温平均）
+  - `byOffset` — `DailyOffset[]`（15件、-7..+7 オフセットの平均 tmax/tmin/rainProb）
+  - `expectedSampleDays`、`yearRange`
+  新しい集計を書く前に既存フィールドを確認すること。
 - **`lib/scoring.ts`** — 各リスクの閾値（rain≥0.45, hot≥0.6 等）と重み（heat 0.9, cold 0.7, wind 0.5）はここに集約。総合スコアは「100 - ペナルティ合計」で 0–100 にクランプ。
 - **`lib/comments.ts`** — `pickPrimary` で最もリスクの高い1要素を主軸に文を組み立てる。優先順は heat > cold > rain > wind（同レベル時）。湿度70%以上 + 暑さ高リスク時は別文を追加。
 - **`lib/jma-data.ts` / `lib/stations.ts`** — `fetch()` ベースでブラウザから取得。モジュール内 `Map` でセッション内キャッシュ。`public/data/jma/*.json` を更新した場合はブラウザのリロードで反映。
 - **`lib/diagnose.ts`** — クライアント側で diagnose と geocode を一箇所に集約。`searchPlaces()` は Open-Meteo を直接叩く。`diagnose()` は station 検索 → 集計 → コメントまでブラウザ内で完結。
 - **`lib/asset-path.ts`** — `NEXT_PUBLIC_BASE_PATH` を読んで `/data/...` 等の fetch URL に basePath を前置。GitHub Pages のサブパス対応用。
+- **チャートの動的色は inline `style` で当てる** — `BarMeter` / `StackedShareBar` 等で軸別の色を切り替える際、Tailwind クラス文字列を `${var}-500` のように動的構築すると **Tailwind v3 JIT が検出できず未生成**になる（Turbopack 環境では safelist も効きが不安定だった）。SVG の `<rect>` 等も `className="fill-orange-100"` ではなく `fill={hex}` 属性を使う。固定の Tailwind クラス（テキスト・レイアウト・border 等）は普通に書いて OK。
 - **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でカラムインデックス指定でパース。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。
 - **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで全47地点の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる。
 
@@ -94,6 +117,7 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **strict mode** 有効。`any` は error。
 - パスエイリアス: `@/*` → リポジトリルート。
 - Next.js flat ESLint config。`react-hooks/set-state-in-effect` がデフォルト error なので、useEffect の中で同期 setState を呼ばないこと（debounce timer の中で呼ぶ等）。
+- **静的エクスポート前提**: `app/api/` は使わない。Server Component から `fs` を読むのも避け（`output: "export"` 時にエラー）、`lib/*` は全て fetch ベースのブラウザ実行可能コードにする。`use client` は `CompareCards` と `CandidateForm` のみ、それ以外は静的レンダリング可能なまま保つ。
 
 ## テストスイート
 
