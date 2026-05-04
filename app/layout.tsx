@@ -21,6 +21,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
+      <head>
+        <meta
+          httpEquiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://geocoding-api.open-meteo.com; object-src 'none'; base-uri 'self'; form-action 'self';"
+        />
+      </head>
       <body className="min-h-screen">
         <a href="#main-content" className="skip-to-content">
           メインコンテンツへスキップ

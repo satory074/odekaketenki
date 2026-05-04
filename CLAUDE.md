@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 主要コマンド
 
-### Web アプリ (Next.js)
+### Web アプリ (Next.js, 静的エクスポート)
 ```bash
 npm run dev      # 開発サーバー (http://localhost:3000)
-npm run build    # 本番ビルド (TypeScript型チェック含む)
+npm run build    # `output: "export"` で out/ に静的書き出し
 npm run lint     # ESLint
-npm run start    # 本番サーバー
+NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build  # GitHub Pages 用 (/odekaketenki サブパス)
 ```
 
 ### データインジェスト (Python uv, scripts/)
@@ -40,18 +40,29 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 [ユーザー入力 (場所文字列 + 候補日)]
         │
         ▼
-[Next.js App Router]
-   ├─ app/api/geocode    → Open-Meteo Geocoding API (JP限定)
-   ├─ app/api/diagnose   → 最寄JMA観測点 → 集計 → スコア → コメント
-   └─ app/page.tsx       → クライアントUI
+[Next.js App Router (静的エクスポート)]
+   └─ app/page.tsx → CandidateForm (use client)
         │
         ▼
+[lib/diagnose.ts]  ※ ブラウザで完結
+   ├─ searchPlaces() → Open-Meteo Geocoding API 直叩き
+   └─ diagnose()
+        ├─ findNearestStation()      → fetch /data/stations.json
+        ├─ loadStationData(id)       → fetch /data/jma/<id>.json
+        ├─ aggregateAroundDate()     → 純粋関数で集計
+        ├─ score()                   → 純粋関数でスコアリング
+        └─ generateComment()         → ルールベース日本語コメント
+
 [public/data/]
    ├─ stations.json       → 47地点のID/名前/緯度経度/都道府県
    └─ jma/<id>.json       → 各地点の30年分日次データ (mm-dd → 年配列)
 ```
 
-データは「事前バッチで取得→静的JSON→runtime read-only」の流れ。リクエスト時に外部APIを叩くのは Open-Meteo Geocoding のみ（24h キャッシュ）。
+**完全クライアント側**：API ルートは存在しない（GitHub Pages 静的ホスティング向け）。Open-Meteo Geocoding はブラウザから CORS で直叩き。観測点データは `public/data/` から `fetch()`、ブラウザ内 `Map` でプロセス内キャッシュ。
+
+## デプロイ
+
+GitHub Pages (`gh-pages` 環境)。`.github/workflows/deploy.yml` が `main` push をトリガに `NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build` → `actions/deploy-pages` で配信。CSP は `app/layout.tsx` の `<meta http-equiv="Content-Security-Policy">` で実装（GitHub Pages はカスタムヘッダー不可のため）。
 
 ## 重要な設計判断
 
@@ -72,7 +83,9 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **`lib/aggregate.ts`** — ±7日のキー計算は閏年を避けるため `2001` を基準年に固定して date math。集計結果は欠損値を除外して算術平均、`n` でサンプル数を返す（UIで表示）。
 - **`lib/scoring.ts`** — 各リスクの閾値（rain≥0.45, hot≥0.6 等）と重み（heat 0.9, cold 0.7, wind 0.5）はここに集約。総合スコアは「100 - ペナルティ合計」で 0–100 にクランプ。
 - **`lib/comments.ts`** — `pickPrimary` で最もリスクの高い1要素を主軸に文を組み立てる。優先順は heat > cold > rain > wind（同レベル時）。湿度70%以上 + 暑さ高リスク時は別文を追加。
-- **`lib/jma-data.ts`** — `Map` でプロセス内キャッシュ。dev中に `public/data/jma/*.json` を更新したら **dev server を再起動** しないと反映されない。
+- **`lib/jma-data.ts` / `lib/stations.ts`** — `fetch()` ベースでブラウザから取得。モジュール内 `Map` でセッション内キャッシュ。`public/data/jma/*.json` を更新した場合はブラウザのリロードで反映。
+- **`lib/diagnose.ts`** — クライアント側で diagnose と geocode を一箇所に集約。`searchPlaces()` は Open-Meteo を直接叩く。`diagnose()` は station 検索 → 集計 → コメントまでブラウザ内で完結。
+- **`lib/asset-path.ts`** — `NEXT_PUBLIC_BASE_PATH` を読んで `/data/...` 等の fetch URL に basePath を前置。GitHub Pages のサブパス対応用。
 - **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でカラムインデックス指定でパース。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。
 - **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで全47地点の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる。
 

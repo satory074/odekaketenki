@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { diagnose, searchPlaces } from "@/lib/diagnose";
 import type {
   DiagnoseResponse,
   GeocodeCandidate,
@@ -39,13 +40,8 @@ export function CandidateForm() {
       }
       setSearching(true);
       try {
-        const resp = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
-        if (resp.ok) {
-          const data = (await resp.json()) as { candidates: GeocodeCandidate[] };
-          setCandidates(data.candidates);
-        } else {
-          setCandidates([]);
-        }
+        const results = await searchPlaces(query);
+        setCandidates(results);
       } catch {
         setCandidates([]);
       } finally {
@@ -82,26 +78,17 @@ export function CandidateForm() {
     }
     setSubmitting(true);
     try {
-      const resp = await fetch("/api/diagnose", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          lat: selected.lat,
-          lng: selected.lng,
-          dates: cleaned,
-          placeName: selected.name,
-        }),
+      const data = await diagnose({
+        lat: selected.lat,
+        lng: selected.lng,
+        dates: cleaned,
+        placeName: selected.name,
       });
-      const data = await resp.json();
-      if (!resp.ok) {
-        setError(data.error ?? "診断に失敗しました。");
-        setResult(null);
-      } else {
-        setResult(data as DiagnoseResponse);
-      }
+      setResult(data);
     } catch (err) {
       console.error(err);
-      setError("通信エラーが発生しました。");
+      setError(err instanceof Error ? err.message : "診断に失敗しました。");
+      setResult(null);
     } finally {
       setSubmitting(false);
     }

@@ -1,16 +1,24 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { assetPath } from "./asset-path";
 import type { Station } from "./types";
 
 let cache: Station[] | null = null;
+let inflight: Promise<Station[]> | null = null;
 
 export async function loadStations(): Promise<Station[]> {
   if (cache) return cache;
-  const filePath = path.join(process.cwd(), "public", "data", "stations.json");
-  const raw = await fs.readFile(filePath, "utf-8");
-  const parsed = JSON.parse(raw) as Station[];
-  cache = parsed;
-  return parsed;
+  if (inflight) return inflight;
+  inflight = (async () => {
+    const resp = await fetch(assetPath("/data/stations.json"));
+    if (!resp.ok) throw new Error(`stations load failed: ${resp.status}`);
+    const parsed = (await resp.json()) as Station[];
+    cache = parsed;
+    return parsed;
+  })();
+  try {
+    return await inflight;
+  } finally {
+    inflight = null;
+  }
 }
 
 const EARTH_RADIUS_KM = 6371;
