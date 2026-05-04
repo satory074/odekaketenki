@@ -1,0 +1,15 @@
+[project]
+name = "odekaketenki-ingest"
+version = "0.1.0"
+description = "JMA historical weather ingest for odekaketenki"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.2",
+    "tenacity>=9.0",
+    "tqdm>=4.66",
+]
+
+[tool.uv]
+package = false
