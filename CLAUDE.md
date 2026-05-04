@@ -1,6 +1,6 @@
-# CLAUDE.md — odekaketenki
+# CLAUDE.md
 
-このファイルは Claude Code がこのプロジェクトで作業する際のガイダンスを提供します。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## サービス概要
 
@@ -67,24 +67,14 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 ### なぜルールベースコメントか
 Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3）出力ぶれの3点でMVPに不向きと判断。閾値ベースの優先度ロジック（`lib/comments.ts` の `pickPrimary`）で、雨/暑さ/寒さ/風から最もリスクの高い1つを軸に1〜2文を組み立てる。
 
-## ファイル構成（重要箇所）
+## 非自明な実装ポイント
 
-| パス | 役割 |
-|---|---|
-| `app/page.tsx` | ホームページ（フォーム + 結果表示） |
-| `app/api/geocode/route.ts` | Open-Meteo Geocoding ラッパー |
-| `app/api/diagnose/route.ts` | メインAPI（集計→スコア→コメント） |
-| `lib/types.ts` | 共通型定義 (Station, StationData, Aggregated, ScoreReport) |
-| `lib/aggregate.ts` | ±7日×30年の集計ロジック |
-| `lib/scoring.ts` | リスク3段階判定 + 総合スコア（0-100） |
-| `lib/comments.ts` | 日本語コメント生成（テンプレ + 優先度） |
-| `lib/stations.ts` | 観測点レジストリ + ハバーサイン最近傍探索 |
-| `lib/jma-data.ts` | 観測点JSONの読み込み（プロセス内キャッシュ） |
-| `lib/geocode.ts` | Open-Meteo Geocoding クライアント |
-| `scripts/jma_stations.py` | 47地点の prec_no/block_no/緯度経度レジストリ |
-| `scripts/fetch_jma.py` | 気象庁HTMLダウンロード+パース（rate-limited） |
-| `scripts/build_dataset.py` | 生CSV→アプリ用JSON変換 |
-| `scripts/seed_dev_data.mjs` | デモ用合成データ生成（Node） |
+- **`lib/aggregate.ts`** — ±7日のキー計算は閏年を避けるため `2001` を基準年に固定して date math。集計結果は欠損値を除外して算術平均、`n` でサンプル数を返す（UIで表示）。
+- **`lib/scoring.ts`** — 各リスクの閾値（rain≥0.45, hot≥0.6 等）と重み（heat 0.9, cold 0.7, wind 0.5）はここに集約。総合スコアは「100 - ペナルティ合計」で 0–100 にクランプ。
+- **`lib/comments.ts`** — `pickPrimary` で最もリスクの高い1要素を主軸に文を組み立てる。優先順は heat > cold > rain > wind（同レベル時）。湿度70%以上 + 暑さ高リスク時は別文を追加。
+- **`lib/jma-data.ts`** — `Map` でプロセス内キャッシュ。dev中に `public/data/jma/*.json` を更新したら **dev server を再起動** しないと反映されない。
+- **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でカラムインデックス指定でパース。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。
+- **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで全47地点の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる。
 
 ## TypeScript / Lint 規約
 
@@ -92,14 +82,14 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - パスエイリアス: `@/*` → リポジトリルート。
 - Next.js flat ESLint config。`react-hooks/set-state-in-effect` がデフォルト error なので、useEffect の中で同期 setState を呼ばないこと（debounce timer の中で呼ぶ等）。
 
+## テストスイート
+
+無し。`npm test` 等は未定義。検証は `npm run build`（型チェック）+ `npm run lint` + ブラウザ手動確認の3点で行う。
+
 ## データソースとライセンス
 
 - **気象庁オープンデータ**: 商用利用可。フッターに「気象庁データを加工して利用」のクレジットを表示。obsdlへの高頻度アクセスは禁止されているため、事前バッチ + キャッシュで運用。
 - **Open-Meteo Geocoding API**: CC-BY 4.0。無料、APIキー不要、商用利用可。
-
-## デプロイ
-
-未設定。basecampと同様にAWS Amplify想定だが、Vercelでも動く（標準的なNext.js App Router構成）。
 
 ## 既知の制約
 
