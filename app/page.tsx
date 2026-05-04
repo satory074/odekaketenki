@@ -39,6 +39,9 @@ export default function HomePage() {
           ※ 任意地点の入力を最寄りの観測地点に割り当てて集計しています。表示値は参考値です。
         </p>
         <p className="mt-1">
+          ※ 集計範囲: 候補日±7日 × 過去30年（1995-2024）。分布バンドは P10–P90、太色帯は P25–P75、縦線は中央値。
+        </p>
+        <p className="mt-1">
           ※ 現在はデモ用の合成データで動作しています。気象庁の実データへの差し替えは <code className="rounded bg-stone-100 px-1">scripts/fetch_jma.py</code> による事前バッチで順次行います。
         </p>
       </footer>

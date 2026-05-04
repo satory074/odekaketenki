@@ -1,4 +1,12 @@
-import type { Aggregated, DailyRecord, StationData } from "./types";
+import type {
+  Aggregated,
+  DailyOffset,
+  DailyRecord,
+  Percentiles,
+  RainShare,
+  StationData,
+  YearOutcome,
+} from "./types";
 
 const RAIN_MM = 1.0;
 const HEAVY_RAIN_MM = 30.0;
@@ -19,15 +27,6 @@ function shiftedKey(monthDay: string, offsetDays: number): string {
   return mmdd(base);
 }
 
-function pushDefined(target: number[], values: (number | null)[] | undefined) {
-  if (!values) return;
-  for (const v of values) {
-    if (v !== null && v !== undefined && Number.isFinite(v)) {
-      target.push(v);
-    }
-  }
-}
-
 function avg(values: number[]): number {
   if (values.length === 0) return 0;
   let s = 0;
@@ -42,6 +41,54 @@ function fraction(values: number[], pred: (v: number) => boolean): number {
   return n / values.length;
 }
 
+function quantile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0];
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  const w = idx - lo;
+  return sorted[lo] * (1 - w) + sorted[hi] * w;
+}
+
+function percentilesOf(values: number[]): Percentiles {
+  if (values.length === 0) {
+    return { p10: 0, p25: 0, p50: 0, p75: 0, p90: 0 };
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  return {
+    p10: quantile(sorted, 0.1),
+    p25: quantile(sorted, 0.25),
+    p50: quantile(sorted, 0.5),
+    p75: quantile(sorted, 0.75),
+    p90: quantile(sorted, 0.9),
+  };
+}
+
+function rainShareOf(prcp: number[]): RainShare {
+  if (prcp.length === 0) {
+    return { none: 0, light: 0, moderate: 0, heavy: 0 };
+  }
+  let none = 0;
+  let light = 0;
+  let moderate = 0;
+  let heavy = 0;
+  for (const v of prcp) {
+    if (v < RAIN_MM) none++;
+    else if (v < 10) light++;
+    else if (v < HEAVY_RAIN_MM) moderate++;
+    else heavy++;
+  }
+  const n = prcp.length;
+  return {
+    none: none / n,
+    light: light / n,
+    moderate: moderate / n,
+    heavy: heavy / n,
+  };
+}
+
 export function parseIsoDate(iso: string): Date {
   const [y, m, d] = iso.split("-").map(Number);
   if (!y || !m || !d) {
@@ -49,6 +96,12 @@ export function parseIsoDate(iso: string): Date {
   }
   return new Date(Date.UTC(y, m - 1, d));
 }
+
+type YearAcc = {
+  tmax: number[];
+  tmin: number[];
+  prcp: number[];
+};
 
 export function aggregateAroundDate(
   station: StationData,
@@ -66,18 +119,86 @@ export function aggregateAroundDate(
   const wind: number[] = [];
   const humidity: number[] = [];
 
+  const yearAcc = new Map<number, YearAcc>();
+  for (const y of station.years) {
+    yearAcc.set(y, { tmax: [], tmin: [], prcp: [] });
+  }
+
+  const byOffset: DailyOffset[] = [];
+
   for (let off = -windowDays; off <= windowDays; off++) {
     const key = shiftedKey(baseKey, off);
     const day: DailyRecord | undefined = station.daily[key];
-    if (!day) continue;
-    pushDefined(tmax, day.tmax);
-    pushDefined(tmin, day.tmin);
-    pushDefined(tavg, day.tavg);
-    pushDefined(prcp, day.prcp);
-    pushDefined(sunshine, day.sunshine);
-    pushDefined(wind, day.wind);
-    pushDefined(humidity, day.humidity);
+
+    const offTmax: number[] = [];
+    const offTmin: number[] = [];
+    const offPrcp: number[] = [];
+
+    if (day) {
+      for (let i = 0; i < station.years.length; i++) {
+        const year = station.years[i];
+        const acc = yearAcc.get(year);
+        if (!acc) continue;
+
+        const tmaxV = day.tmax?.[i];
+        const tminV = day.tmin?.[i];
+        const tavgV = day.tavg?.[i];
+        const prcpV = day.prcp?.[i];
+        const sunshineV = day.sunshine?.[i];
+        const windV = day.wind?.[i];
+        const humidityV = day.humidity?.[i];
+
+        if (tmaxV != null && Number.isFinite(tmaxV)) {
+          tmax.push(tmaxV);
+          acc.tmax.push(tmaxV);
+          offTmax.push(tmaxV);
+        }
+        if (tminV != null && Number.isFinite(tminV)) {
+          tmin.push(tminV);
+          acc.tmin.push(tminV);
+          offTmin.push(tminV);
+        }
+        if (tavgV != null && Number.isFinite(tavgV)) tavg.push(tavgV);
+        if (prcpV != null && Number.isFinite(prcpV)) {
+          prcp.push(prcpV);
+          acc.prcp.push(prcpV);
+          offPrcp.push(prcpV);
+        }
+        if (sunshineV != null && Number.isFinite(sunshineV)) sunshine.push(sunshineV);
+        if (windV != null && Number.isFinite(windV)) wind.push(windV);
+        if (humidityV != null && Number.isFinite(humidityV)) humidity.push(humidityV);
+      }
+    }
+
+    byOffset.push({
+      offset: off,
+      tmax: avg(offTmax),
+      tmin: avg(offTmin),
+      rainProb: fraction(offPrcp, (v) => v >= RAIN_MM),
+    });
   }
+
+  const byYear: YearOutcome[] = station.years.map((year) => {
+    const acc = yearAcc.get(year)!;
+    let maxPrcp = 0;
+    for (const v of acc.prcp) if (v > maxPrcp) maxPrcp = v;
+    return {
+      year,
+      n: acc.prcp.length,
+      rainDays: acc.prcp.filter((v) => v >= RAIN_MM).length,
+      maxPrcp,
+      tmaxMean: avg(acc.tmax),
+      tminMean: avg(acc.tmin),
+    };
+  });
+
+  const expectedSampleDays = (windowDays * 2 + 1) * station.years.length;
+
+  const sortedYears = [...station.years].sort((a, b) => a - b);
+  const yearRange =
+    sortedYears.length > 0
+      ? { start: sortedYears[0], end: sortedYears[sortedYears.length - 1] }
+      : { start: 0, end: 0 };
 
   return {
     n: prcp.length,
@@ -92,5 +213,13 @@ export function aggregateAroundDate(
     avgSunshine: avg(sunshine),
     avgWind: avg(wind),
     avgHumidity: humidity.length > 0 ? avg(humidity) : null,
+    tmaxDist: percentilesOf(tmax),
+    tminDist: percentilesOf(tmin),
+    windDist: percentilesOf(wind),
+    rainShare: rainShareOf(prcp),
+    byYear,
+    byOffset,
+    expectedSampleDays,
+    yearRange,
   };
 }

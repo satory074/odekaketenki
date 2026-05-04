@@ -26,6 +26,37 @@ export type StationData = {
   daily: Record<string, DailyRecord>;
 };
 
+export type Percentiles = {
+  p10: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+};
+
+export type RainShare = {
+  none: number;
+  light: number;
+  moderate: number;
+  heavy: number;
+};
+
+export type YearOutcome = {
+  year: number;
+  n: number;
+  rainDays: number;
+  maxPrcp: number;
+  tmaxMean: number;
+  tminMean: number;
+};
+
+export type DailyOffset = {
+  offset: number;
+  tmax: number;
+  tmin: number;
+  rainProb: number;
+};
+
 export type Aggregated = {
   n: number;
   rainProb: number;
@@ -39,6 +70,14 @@ export type Aggregated = {
   avgSunshine: number;
   avgWind: number;
   avgHumidity: number | null;
+  tmaxDist: Percentiles;
+  tminDist: Percentiles;
+  windDist: Percentiles;
+  rainShare: RainShare;
+  byYear: YearOutcome[];
+  byOffset: DailyOffset[];
+  expectedSampleDays: number;
+  yearRange: { start: number; end: number };
 };
 
 export type RiskLevel = "low" | "mid" | "high";

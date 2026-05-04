@@ -5,8 +5,7 @@ import type {
   DiagnoseResponse,
   GeocodeCandidate,
 } from "@/lib/types";
-import { ResultsTable } from "./ResultsTable";
-import { DateDetailCard } from "./DateDetailCard";
+import { CompareCards } from "./CompareCards";
 
 const MAX_DATES = 5;
 
@@ -204,17 +203,7 @@ export function CandidateForm() {
         )}
       </form>
 
-      {result && (
-        <>
-          <ResultsTable data={result} />
-          <section className="mt-6 space-y-4">
-            <h2 className="text-lg font-semibold">日付ごとの詳細</h2>
-            {result.results.map((r) => (
-              <DateDetailCard key={r.date} result={r} />
-            ))}
-          </section>
-        </>
-      )}
+      {result && <CompareCards data={result} />}
     </>
   );
 }
