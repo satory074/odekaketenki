@@ -72,6 +72,7 @@ def write_stations_registry() -> None:
             "prefecture": s.prefecture,
             "lat": s.lat,
             "lng": s.lng,
+            "kind": s.kind,
         }
         for s in STATIONS
     ]

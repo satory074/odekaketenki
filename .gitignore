@@ -37,6 +37,10 @@ next-env.d.ts
 /scripts/**/__pycache__/
 /scripts/.python-version
 
+# discover_stations.py auto-generated output (regenerable, large)
+/scripts/discover_output.py
+/scripts/fetch.log
+
 # IDE
 .idea/
 .vscode/

@@ -4,6 +4,7 @@ export type Station = {
   prefecture: string;
   lat: number;
   lng: number;
+  kind?: "s1" | "a1";
 };
 
 export type DailyRecord = {

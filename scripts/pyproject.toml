@@ -9,6 +9,7 @@ dependencies = [
     "lxml>=5.2",
     "tenacity>=9.0",
     "tqdm>=4.66",
+    "pykakasi>=2.2",
 ]
 
 [tool.uv]

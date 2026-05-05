@@ -95,8 +95,8 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 ### なぜ気象庁 obsdl を直接スクレイピングしているか
 公式APIなし。obsdl の HTML 月次表（`daily_s1.php?prec_no=&block_no=&year=&month=`）をパースして CSV 相当の値を抽出。JMA は「サーバ高頻度アクセス禁止」を明記しているため、`fetch_jma.py` は **3秒+ジッタの間隔** とtenacityでの指数バックオフでレート制御。
 
-### なぜ100地点ではなく47地点か
-都道府県ごとに県庁所在地相当の地方気象台を1つずつ。日本全土をカバーしつつ、commit可能なリポジトリサイズ（合成データで14MB）に収まる。観測史実件数も多く欠損が少ない。将来的には観光地系AMeDAS（軽井沢、河口湖など）を追加予定。
+### 観測地点の規模（2026-05 拡張）
+気象台等 (s1, full data) **159地点** + アメダス (a1, partial data) **1519地点** = **計1678地点**を `scripts/jma_stations.py` の `STATIONS` に登録。`scripts/discover_stations.py` で JMA 都府県別 select ページの `viewPoint()` 呼び出しを巡回スクレイプして自動生成。`fetch_jma.py` の HTML パーサは `<table id="tablefix1">` のヘッダー行を解釈して動的に column→field マッピングを構築（s1 / a1 共通）。アメダスは観測項目が地点ごとに異なる（湿度・日照欠落地点あり）ため、欠落フィールドは null として扱う。**初期 47地点（都道府県の地方気象台）は id・順序を維持**して後方互換を保ち、新規 1631 地点は末尾に追加。
 
 ### なぜ ±7日を集計するか
 特定の1日30サンプルだけだと外れ値の影響が大きい。±7日 × 30年 = 約450サンプルにすると、その時期の典型的な天候パターンが安定して見える。アドバイスメモ参照（"その日だけではなく±7日で見る"）。
@@ -121,7 +121,8 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **`lib/diagnose.ts`** — クライアント側 API。`searchPlaces()` は Open-Meteo を直接叩く。`prepareLocation()` は場所決定時に観測点検索 + データ取得を1回だけ実行（I/Oあり、async）。`diagnoseDate()` はその後の日付クリックごとに集計 + スコアリング + コメント生成を同期で行う（純粋関数、I/Oなし）。`diagnose()` も互換のため残してあるが現状未使用。
 - **`lib/asset-path.ts`** — `NEXT_PUBLIC_BASE_PATH` を読んで `/data/...` 等の fetch URL に basePath を前置。GitHub Pages のサブパス対応用。
 - **チャートの動的色 / 一部の grid 系クラスは inline `style` で当てる** — `BarMeter` / `StackedShareBar` 等で軸別の色を切り替える際、Tailwind クラス文字列を `${var}-500` のように動的構築すると **Tailwind v3 JIT が検出できず未生成**になる（Turbopack 環境では safelist も効きが不安定だった）。SVG の `<rect>` 等も `className="fill-orange-100"` ではなく `fill={hex}` 属性を使う。**さらに、新規ファイルで初めて使う `grid-cols-N`（例: `grid-cols-7`）も同様に未生成になることがある**ので、その場合は `style={{ gridTemplateColumns: "repeat(N, minmax(0, 1fr))" }}` を使う（`Calendar.tsx` で実例）。固定の Tailwind クラス（テキスト・レイアウト・border 等）は普通に書いて OK。
-- **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でカラムインデックス指定でパース。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。
+- **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でパース。`_build_field_map()` がヘッダー行の rowspan/colspan を展開して動的に column→field マッピングを構築するため、s1 (synoptic, 4ヘッダー行 21+列) と a1 (AMeDAS, 3ヘッダー行 4-18列) の両方を共通ロジックで処理。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。`StationRef.kind` で `daily_s1.php` / `daily_a1.php` を切替。
+- **`scripts/discover_stations.py`** — JMA 都府県別 select ページ（`prefecture.php?prec_no=<n>`）から `viewPoint('<kind>','<block_no>','<name>','<kana>',<lat_d>,<lat_m>,<lng_d>,<lng_m>,...)` JS呼び出しを正規表現抽出 → `pykakasi` で漢字→ローマ字（passport式: 東京→tokyo）スラグ生成 → `discover_output.py` に Python リテラルで吐き出して `jma_stations.STATIONS` にマージ。北海道（11–24）は14のサブ地域 prec_no を `北海道` に統合。重複スラグは `<slug>-<prec_no>-<block_no>` で disambiguate。再実行は `.cache/discover/` のキャッシュで爆速。
 - **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで全47地点の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる。
 
 ## TypeScript / Lint 規約
@@ -142,14 +143,17 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 
 ## 既知の制約
 
-1. **データは合成データ**（2026-05時点）— `public/data/jma/*.json` は `seed_dev_data.mjs` 由来の合成値。実データへの差し替えは `fetch_jma.py --all` で。
-2. **観測点47地点のみ** — 観光地特化のAMeDAS追加は将来課題。
+1. **観測データは部分的**（2026-05時点）— `STATIONS` には 1678地点登録済みだが、`public/data/jma/*.json` で実データが揃っているのは初期47地点のみ（合成データ）。残り 1631地点は `fetch_jma.py --all` をバックグラウンド運用で順次取得（~10日）。未取得地点を選ぶと「観測地点 X のデータが取得できません」エラー。
+2. **アメダス地点の観測項目限定** — a1 地点は湿度・日照が欠落することがあり、`stats.avgHumidity` が `null` のときコメント・チャートが省略される。`Aggregated.avg{Tmax,Tmin,Wind}` は集計対象が0件のとき `0` を返すため、`scoring.ts` の閾値で偽陽性を避ける設計。
 3. **用途別スコアなし** — MVP汎用スコアのみ。結婚式/前撮り/キャンプ別の重み付けは未実装。
 4. **±2週間ランキング未実装** — 候補日のピンポイント比較のみ。
 5. **台風接近傾向データなし** — 別データソース要。
+6. **データ容量** — 全 1678地点 × ~320KB ≈ 540MB。GitHub Pages 推奨 100MB を超えるため、Phase D で gzip 圧縮 (`*.json.gz` + `DecompressionStream`) または外部 CDN への移行を検討予定。
 
 ## 拡張のヒント
 
-- **新しい観測点追加**: `scripts/jma_stations.py` の `STATIONS` リストに追記 → `uv run python -m build_dataset --registry-only` で `stations.json` 再生成 → `fetch_jma.py --station <id>` で実データ取得 → `build_dataset.py --station <id>` でJSON生成。
+- **新しい観測点追加（個別）**: `scripts/jma_stations.py` の `STATIONS` リストに追記 → `uv run python -m build_dataset --registry-only` で `stations.json` 再生成 → `fetch_jma.py --station <id>` で実データ取得 → `build_dataset.py --station <id>` でJSON生成。
+- **JMA 全地点の自動発見と再取り込み**: `cd scripts && uv run python -m discover_stations` で `viewPoint()` を再スクレイプ → `discover_output.py` を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に貼替。既存47件の id は `discover_stations.py` の dedup ロジックで保護される。
+- **大量データ取得運用**: `cd scripts && nohup uv run python -m fetch_jma --all --years 30 > fetch.log 2>&1 &` でバックグラウンド実行（~10日、3秒+ジッタのレート制御）。中断時は同コマンドで再開可能（`.cache/<id>/YYYY-MM.html` 再利用）。完了後 `uv run python -m build_dataset --all` で per-station JSON 再生成。
 - **用途別スコア**: `lib/scoring.ts` に `score(stats, useCase: 'wedding' | ...)` のオーバーロード追加。重み係数を用途別に。
 - **台風データ**: 気象庁の「台風経路図」CSVや別データソース（Best Track）を `scripts/fetch_typhoon.py` として追加し、月別接近確率を集計。
