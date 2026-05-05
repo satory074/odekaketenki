@@ -74,7 +74,7 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 
 - **`components/CandidateForm.tsx`** — 場所検索・観測点先読み・カレンダー・詳細パネルのオーケストレータ。`prepareLocation()` を場所選択時の `useEffect` で1度だけ呼び、結果を `LocationContext` として保持。`Calendar` の `onSelect` から `diagnoseDate()` を同期で叩いて単一日の詳細を表示。複数日比較や送信ボタンは持たない。
 - **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
-- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。トップに要約カード3枚、続いてメインの「降水量の構成」、気温分布、年ごとの雨日数（俯瞰＋時系列バー）、±7日推移、風速分布を縦に並べ、末尾に `<details>` で平均値テーブル。サンプル数バナーは要約カード直下。
+- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。トップに要約カード3枚、続いてメインの「降水量の構成」、気温分布、年ごとの雨日数（俯瞰＋時系列バー）、±7日推移、風速分布を縦に並べ、末尾に `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）。サンプル数バナーは要約カード直下。
 - **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 8種:
   - `StatCards` (雨日割合・気温帯・風速帯の3カード要約。リスクピル付き)
   - `BarMeter` (横バー + 中/高リスク閾値ティック、現状未使用)
