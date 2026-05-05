@@ -4,6 +4,7 @@ import { StackedShareBar } from "./charts/StackedShareBar";
 import { YearHeatmap } from "./charts/YearHeatmap";
 import { YearBars } from "./charts/YearBars";
 import { OffsetSparkline } from "./charts/OffsetSparkline";
+import { SamplesTable } from "./charts/SamplesTable";
 import { StatCards } from "./charts/StatCards";
 
 const WINDOW_DAYS = 7;
@@ -182,6 +183,16 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
             <dd className="font-medium">{stats.avgWind.toFixed(1)} m/s</dd>
           </div>
         </dl>
+      </details>
+
+      {/* ⑩ 全観測データ一覧 */}
+      <details className="rounded-md bg-white p-3 ring-1 ring-stone-200">
+        <summary className="cursor-pointer text-xs font-semibold text-stone-700">
+          全観測データ一覧（{stats.samples.length}件）
+        </summary>
+        <div className="mt-3">
+          <SamplesTable samples={stats.samples} yearRange={stats.yearRange} />
+        </div>
       </details>
     </div>
   );

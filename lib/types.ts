@@ -57,6 +57,19 @@ export type DailyOffset = {
   rainProb: number;
 };
 
+export type SampleRecord = {
+  year: number;
+  offset: number;
+  monthDay: string;
+  tmax: number | null;
+  tmin: number | null;
+  tavg: number | null;
+  prcp: number | null;
+  sunshine: number | null;
+  wind: number | null;
+  humidity: number | null;
+};
+
 export type Aggregated = {
   n: number;
   rainProb: number;
@@ -76,6 +89,7 @@ export type Aggregated = {
   rainShare: RainShare;
   byYear: YearOutcome[];
   byOffset: DailyOffset[];
+  samples: SampleRecord[];
   expectedSampleDays: number;
   yearRange: { start: number; end: number };
 };

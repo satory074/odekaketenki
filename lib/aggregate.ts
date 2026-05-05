@@ -4,6 +4,7 @@ import type {
   DailyRecord,
   Percentiles,
   RainShare,
+  SampleRecord,
   StationData,
   YearOutcome,
 } from "./types";
@@ -125,6 +126,10 @@ export function aggregateAroundDate(
   }
 
   const byOffset: DailyOffset[] = [];
+  const samples: SampleRecord[] = [];
+
+  const finiteOrNull = (v: number | null | undefined): number | null =>
+    v != null && Number.isFinite(v) ? v : null;
 
   for (let off = -windowDays; off <= windowDays; off++) {
     const key = shiftedKey(baseKey, off);
@@ -167,6 +172,19 @@ export function aggregateAroundDate(
         if (sunshineV != null && Number.isFinite(sunshineV)) sunshine.push(sunshineV);
         if (windV != null && Number.isFinite(windV)) wind.push(windV);
         if (humidityV != null && Number.isFinite(humidityV)) humidity.push(humidityV);
+
+        samples.push({
+          year,
+          offset: off,
+          monthDay: key,
+          tmax: finiteOrNull(tmaxV),
+          tmin: finiteOrNull(tminV),
+          tavg: finiteOrNull(tavgV),
+          prcp: finiteOrNull(prcpV),
+          sunshine: finiteOrNull(sunshineV),
+          wind: finiteOrNull(windV),
+          humidity: finiteOrNull(humidityV),
+        });
       }
     }
 
@@ -219,6 +237,7 @@ export function aggregateAroundDate(
     rainShare: rainShareOf(prcp),
     byYear,
     byOffset,
+    samples,
     expectedSampleDays,
     yearRange,
   };
