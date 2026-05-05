@@ -48,9 +48,10 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
         ▼
 [lib/diagnose.ts]  ※ ブラウザで完結
    ├─ searchPlaces() → Open-Meteo Geocoding API 直叩き
-   ├─ prepareLocation()  ※ 場所選択時に1回だけ
+   ├─ prepareLocation()  ※ 任意座標 → 最寄り観測点（geocoding 経由 / 現在地ボタン経由）
    │     ├─ findNearestStation()  → fetch /data/stations.json
    │     └─ loadStationData(id)   → fetch /data/jma/<id>.json
+   ├─ prepareLocationFromStation(stationId)  ※ StationPicker 経由（最寄り計算をスキップ、distanceKm=0）
    └─ diagnoseDate()  ※ カレンダー上の日付クリックごと（同期・I/Oなし）
          ├─ aggregateAroundDate()     → 純粋関数で集計
          ├─ score()                   → 純粋関数でスコアリング
@@ -72,7 +73,10 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 
 ## 可視化レイヤ
 
-- **`components/CandidateForm.tsx`** — 場所検索・観測点先読み・カレンダー・詳細パネルのオーケストレータ。`prepareLocation()` を場所選択時の `useEffect` で1度だけ呼び、結果を `LocationContext` として保持。`Calendar` の `onSelect` から `diagnoseDate()` を同期で叩いて単一日の詳細を表示。複数日比較や送信ボタンは持たない。
+- **`components/CandidateForm.tsx`** — 場所検索・観測点先読み・カレンダー・詳細パネルのオーケストレータ。地点選択は ①検索コンボボックス（ARIA `role="combobox"` / `aria-activedescendant` / ↑↓ Enter Esc 対応・マッチ部分太字・`No results` メッセージ）②`📍 現在地` ボタン（`navigator.geolocation` 経由、許可拒否/タイムアウトのインラインエラー）③`StationPicker`（47地点を地域別に直接） の3経路を提供。場所決定で `prepareLocation()` または `prepareLocationFromStation()` を `useEffect` で1度だけ呼び `LocationContext` として保持、`Calendar` の `onSelect` から `diagnoseDate()` を同期で叩いて単一日の詳細を表示。最近選んだ場所は `lib/recent-places.ts` 経由で localStorage に最大5件保存、検索ボックスフォーカス時にドロップダウン頭に表示。
+- **`components/StationPicker.tsx`** — 47地点を地域タブ（北海道・東北 / 関東 / 中部 / 近畿 / 中国・四国 / 九州・沖縄）でブラウズできる折りたたみピッカー。`<details>` ベース・依存ゼロ。タブとボタンは `role="tab"` / `aria-selected` 付き、地点ボタンは `aria-label="<station>（<prefecture>）"`。地点ボタンのグリッドは `style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}` を inline で指定（Tailwind の `grid-cols-N` 動的生成回避ルール準拠）。
+- **`lib/regions.ts`** — `prefecture → Region` 対応の純データ（6地域分類）。
+- **`lib/recent-places.ts`** — `localStorage` の薄いラッパー（`loadRecentPlaces` / `saveRecentPlace` / `clearRecentPlaces`）。SSR セーフ、quota エラーは `try/catch` で握りつぶす。
 - **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
 - **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。トップに要約カード3枚、続いてメインの「降水量の構成」、気温分布、年ごとの雨日数（俯瞰＋時系列バー）、±7日推移、風速分布を縦に並べ、末尾に `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）。サンプル数バナーは要約カード直下。
 - **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 8種:

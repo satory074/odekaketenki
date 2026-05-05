@@ -2,7 +2,7 @@ import { aggregateAroundDate } from "./aggregate";
 import { generateComment } from "./comments";
 import { loadStationData } from "./jma-data";
 import { score } from "./scoring";
-import { findNearestStation } from "./stations";
+import { findNearestStation, loadStations } from "./stations";
 import type { DiagnoseResult, StationData } from "./types";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,6 +37,29 @@ export async function prepareLocation(input: {
       name: nearest.station.name,
       prefecture: nearest.station.prefecture,
       distanceKm: Math.round(nearest.distanceKm * 10) / 10,
+    },
+    stationData,
+  };
+}
+
+export async function prepareLocationFromStation(
+  stationId: string,
+): Promise<LocationContext> {
+  const stations = await loadStations();
+  const station = stations.find((s) => s.id === stationId);
+  if (!station) {
+    throw new Error(`観測地点が見つかりません: ${stationId}`);
+  }
+  const stationData = await loadStationData(station.id);
+  if (!stationData) {
+    throw new Error(`観測地点 ${station.id} のデータが取得できません。`);
+  }
+  return {
+    station: {
+      id: station.id,
+      name: station.name,
+      prefecture: station.prefecture,
+      distanceKm: 0,
     },
     stationData,
   };
