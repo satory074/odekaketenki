@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 差別化軸: 単なる過去天気検索ではなく、**「日程決定のためのリスク比較 + 日本語コメント」** に特化。
 
+**主役の可視化は「降水量の構成」**: 候補日±7日窓の全観測日を晴れ／小雨／雨／大雨の4区分に分類した内訳バー（`StackedShareBar`）で、`DateDetailPanel` の中で最も視覚的に大きい。新しいチャートを追加する際もこの主役を埋もれさせないこと。
+
 ## 主要コマンド
 
 ### Web アプリ (Next.js, 静的エクスポート)
