@@ -3,30 +3,26 @@ import { generateComment } from "./comments";
 import { loadStationData } from "./jma-data";
 import { score } from "./scoring";
 import { findNearestStation } from "./stations";
-import type { DiagnoseResponse, DiagnoseResult } from "./types";
+import type { DiagnoseResult, StationData } from "./types";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-export type DiagnoseInput = {
-  lat: number;
-  lng: number;
-  dates: string[];
-  placeName?: string;
+export type StationMeta = {
+  id: string;
+  name: string;
+  prefecture: string;
+  distanceKm: number;
 };
 
-export async function diagnose(input: DiagnoseInput): Promise<DiagnoseResponse> {
-  if (!Array.isArray(input.dates) || input.dates.length === 0) {
-    throw new Error("候補日が空です。");
-  }
-  if (input.dates.length > 5) {
-    throw new Error("候補日は最大5件までです。");
-  }
-  for (const d of input.dates) {
-    if (!ISO_DATE_RE.test(d)) {
-      throw new Error(`不正な日付形式: ${d}`);
-    }
-  }
+export type LocationContext = {
+  station: StationMeta;
+  stationData: StationData;
+};
 
+export async function prepareLocation(input: {
+  lat: number;
+  lng: number;
+}): Promise<LocationContext> {
   const nearest = await findNearestStation(input.lat, input.lng);
   if (!nearest) {
     throw new Error("最寄りの観測地点が見つかりません。");
@@ -35,19 +31,6 @@ export async function diagnose(input: DiagnoseInput): Promise<DiagnoseResponse> 
   if (!stationData) {
     throw new Error(`観測地点 ${nearest.station.id} のデータが取得できません。`);
   }
-
-  const results: DiagnoseResult[] = input.dates.map((date) => {
-    const stats = aggregateAroundDate(stationData, date);
-    const sc = score(stats);
-    const comment = generateComment(stats, sc, {
-      date,
-      placeName: input.placeName ?? nearest.station.name,
-    });
-    return { date, stats, scores: sc, comment };
-  });
-
-  results.sort((a, b) => b.scores.total - a.scores.total);
-
   return {
     station: {
       id: nearest.station.id,
@@ -55,8 +38,26 @@ export async function diagnose(input: DiagnoseInput): Promise<DiagnoseResponse> 
       prefecture: nearest.station.prefecture,
       distanceKm: Math.round(nearest.distanceKm * 10) / 10,
     },
-    results,
+    stationData,
   };
+}
+
+export function diagnoseDate(args: {
+  stationData: StationData;
+  stationName: string;
+  placeName?: string;
+  date: string;
+}): DiagnoseResult {
+  if (!ISO_DATE_RE.test(args.date)) {
+    throw new Error(`不正な日付形式: ${args.date}`);
+  }
+  const stats = aggregateAroundDate(args.stationData, args.date);
+  const sc = score(stats);
+  const comment = generateComment(stats, sc, {
+    date: args.date,
+    placeName: args.placeName ?? args.stationName,
+  });
+  return { date: args.date, stats, scores: sc, comment };
 }
 
 export async function searchPlaces(query: string): Promise<

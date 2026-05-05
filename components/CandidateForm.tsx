@@ -1,32 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { diagnose, searchPlaces } from "@/lib/diagnose";
-import type {
-  DiagnoseResponse,
-  GeocodeCandidate,
-} from "@/lib/types";
-import { CompareCards } from "./CompareCards";
-
-const MAX_DATES = 5;
-
-function todayPlus(months: number): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() + months);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+import {
+  diagnoseDate,
+  prepareLocation,
+  searchPlaces,
+  type LocationContext,
+} from "@/lib/diagnose";
+import type { DiagnoseResult, GeocodeCandidate } from "@/lib/types";
+import { Calendar } from "./Calendar";
+import { DateDetailPanel } from "./DateDetailPanel";
 
 export function CandidateForm() {
   const [query, setQuery] = useState("");
   const [candidates, setCandidates] = useState<GeocodeCandidate[]>([]);
   const [selected, setSelected] = useState<GeocodeCandidate | null>(null);
   const [searching, setSearching] = useState(false);
-  const [dates, setDates] = useState<string[]>([todayPlus(2)]);
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<DiagnoseResponse | null>(null);
+
+  const [location, setLocation] = useState<LocationContext | null>(null);
+  const [loadingLocation, setLoadingLocation] = useState(false);
+
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [diagnosis, setDiagnosis] = useState<DiagnoseResult | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -53,144 +49,141 @@ export function CandidateForm() {
     };
   }, [query, selected]);
 
-  const updateDate = (i: number, value: string) => {
-    setDates((prev) => prev.map((d, idx) => (idx === i ? value : d)));
-  };
-  const addDate = () => {
-    if (dates.length >= MAX_DATES) return;
-    setDates((prev) => [...prev, todayPlus(prev.length + 2)]);
-  };
-  const removeDate = (i: number) => {
-    setDates((prev) => prev.filter((_, idx) => idx !== i));
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ctx = await prepareLocation({ lat: selected.lat, lng: selected.lng });
+        if (cancelled) return;
+        setLocation(ctx);
+      } catch (err) {
+        if (cancelled) return;
+        console.error(err);
+        setError(err instanceof Error ? err.message : "観測点データの取得に失敗しました。");
+      } finally {
+        if (!cancelled) setLoadingLocation(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const resetLocationState = () => {
+    setLocation(null);
+    setSelectedDate(null);
+    setDiagnosis(null);
+    setError(null);
   };
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    if (!selected) {
-      setError("場所を選択してください。");
-      return;
-    }
-    const cleaned = dates.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
-    if (cleaned.length === 0) {
-      setError("有効な候補日を1件以上入力してください。");
-      return;
-    }
-    setSubmitting(true);
+  const handleQueryChange = (value: string) => {
+    setSelected(null);
+    setQuery(value);
+    setLoadingLocation(false);
+    resetLocationState();
+  };
+
+  const handleSelectCandidate = (c: GeocodeCandidate) => {
+    setSelected(c);
+    setQuery("");
+    setCandidates([]);
+    resetLocationState();
+    setLoadingLocation(true);
+  };
+
+  const handleSelectDate = (date: string) => {
+    if (!location || !selected) return;
     try {
-      const data = await diagnose({
-        lat: selected.lat,
-        lng: selected.lng,
-        dates: cleaned,
+      const result = diagnoseDate({
+        stationData: location.stationData,
+        stationName: location.station.name,
         placeName: selected.name,
+        date,
       });
-      setResult(data);
+      setSelectedDate(date);
+      setDiagnosis(result);
+      setError(null);
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "診断に失敗しました。");
-      setResult(null);
-    } finally {
-      setSubmitting(false);
     }
   };
 
   return (
-    <>
-      <form onSubmit={onSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium">場所</label>
-          <div className="relative mt-1">
-            <input
-              type="text"
-              value={selected ? selected.name : query}
-              onChange={(e) => {
-                setSelected(null);
-                setQuery(e.target.value);
-              }}
-              placeholder="例: 大阪市、東京、京都駅、軽井沢"
-              className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            />
-            {!selected && candidates.length > 0 && (
-              <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-stone-200 bg-white shadow-lg">
-                {candidates.map((c, i) => (
-                  <li key={`${c.lat}-${c.lng}-${i}`}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelected(c);
-                        setQuery("");
-                        setCandidates([]);
-                      }}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-stone-100"
-                    >
-                      <span>{c.name}</span>
-                      <span className="text-xs text-stone-400">
-                        {c.lat.toFixed(2)}, {c.lng.toFixed(2)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!selected && searching && (
-              <p className="mt-1 text-xs text-stone-400">検索中…</p>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium">候補日（最大{MAX_DATES}件）</label>
-            {dates.length < MAX_DATES && (
-              <button
-                type="button"
-                onClick={addDate}
-                className="text-xs text-sky-700 hover:underline"
-              >
-                + 追加
-              </button>
-            )}
-          </div>
-          <div className="mt-2 space-y-2">
-            {dates.map((d, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={d}
-                  onChange={(e) => updateDate(i, e.target.value)}
-                  className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                />
-                {dates.length > 1 && (
+    <div className="space-y-6">
+      <div>
+        <label className="block text-sm font-medium">場所</label>
+        <div className="relative mt-1">
+          <input
+            type="text"
+            value={selected ? selected.name : query}
+            onChange={(e) => handleQueryChange(e.target.value)}
+            placeholder="例: 大阪市、東京、京都駅、軽井沢"
+            className="w-full rounded-md border border-stone-300 px-3 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          />
+          {!selected && candidates.length > 0 && (
+            <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-stone-200 bg-white shadow-lg">
+              {candidates.map((c, i) => (
+                <li key={`${c.lat}-${c.lng}-${i}`}>
                   <button
                     type="button"
-                    onClick={() => removeDate(i)}
-                    className="rounded px-2 py-1 text-xs text-stone-500 hover:bg-stone-100"
-                    aria-label="この候補日を削除"
+                    onClick={() => handleSelectCandidate(c)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-stone-100"
                   >
-                    削除
+                    <span>{c.name}</span>
+                    <span className="text-xs text-stone-400">
+                      {c.lat.toFixed(2)}, {c.lng.toFixed(2)}
+                    </span>
                   </button>
-                )}
-              </div>
-            ))}
-          </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!selected && searching && (
+            <p className="mt-1 text-xs text-stone-400">検索中…</p>
+          )}
         </div>
+      </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-md bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-stone-400"
-        >
-          {submitting ? "診断中…" : "天気リスクを診断する"}
-        </button>
+      {selected && (
+        <div className="rounded-md bg-stone-50 px-3 py-2 text-xs text-stone-600">
+          {loadingLocation && <span>観測点データを読み込み中…</span>}
+          {location && (
+            <span>
+              最寄観測地点: <strong>{location.station.name}</strong>
+              <span className="text-stone-400"> ({location.station.prefecture})</span>
+              <span className="ml-1">/ 距離 約{location.station.distanceKm}km</span>
+            </span>
+          )}
+        </div>
+      )}
 
-        {error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {location && (
+        <div>
+          <p className="mb-2 text-xs text-stone-500">
+            日付をクリックすると、その日（前後7日 × 過去30年）の天気リスクを表示します。
           </p>
-        )}
-      </form>
+          <Calendar selectedDate={selectedDate} onSelect={handleSelectDate} />
+        </div>
+      )}
 
-      {result && <CompareCards data={result} />}
-    </>
+      {diagnosis && (
+        <section className="space-y-2">
+          <h2 className="text-base font-semibold text-stone-800">
+            {diagnosis.date.replace(/-/g, "/")} の天気リスク
+          </h2>
+          <div className="overflow-hidden rounded-lg border border-stone-200 bg-white shadow-sm">
+            <DateDetailPanel result={diagnosis} />
+          </div>
+        </section>
+      )}
+    </div>
   );
 }

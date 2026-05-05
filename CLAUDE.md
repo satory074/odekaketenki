@@ -37,21 +37,22 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 ## アーキテクチャ
 
 ```
-[ユーザー入力 (場所文字列 + 候補日)]
+[ユーザー入力 (場所文字列 → カレンダー上の日付クリック)]
         │
         ▼
 [Next.js App Router (静的エクスポート)]
-   └─ app/page.tsx → CandidateForm (use client)
+   └─ app/page.tsx → CandidateForm (use client) → Calendar / DateDetailPanel
         │
         ▼
 [lib/diagnose.ts]  ※ ブラウザで完結
    ├─ searchPlaces() → Open-Meteo Geocoding API 直叩き
-   └─ diagnose()
-        ├─ findNearestStation()      → fetch /data/stations.json
-        ├─ loadStationData(id)       → fetch /data/jma/<id>.json
-        ├─ aggregateAroundDate()     → 純粋関数で集計
-        ├─ score()                   → 純粋関数でスコアリング
-        └─ generateComment()         → ルールベース日本語コメント
+   ├─ prepareLocation()  ※ 場所選択時に1回だけ
+   │     ├─ findNearestStation()  → fetch /data/stations.json
+   │     └─ loadStationData(id)   → fetch /data/jma/<id>.json
+   └─ diagnoseDate()  ※ カレンダー上の日付クリックごと（同期・I/Oなし）
+         ├─ aggregateAroundDate()     → 純粋関数で集計
+         ├─ score()                   → 純粋関数でスコアリング
+         └─ generateComment()         → ルールベース日本語コメント
 
 [public/data/]
    ├─ stations.json       → 47地点のID/名前/緯度経度/都道府県
@@ -69,8 +70,9 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 
 ## 可視化レイヤ
 
-- **`components/CompareCards.tsx`** — 候補日 1件 = 1カードの md:2列グリッド。展開状態は `useState<Set<string>>` でカード ID（日付文字列）を保持。最初のカードはデフォルト展開。
-- **`components/DateDetailPanel.tsx`** — カード展開時に下に挿入される詳細パネル。5チャートを縦に並べ、末尾に `<details>` で平均値テーブル + サンプル数バナー。
+- **`components/CandidateForm.tsx`** — 場所検索・観測点先読み・カレンダー・詳細パネルのオーケストレータ。`prepareLocation()` を場所選択時の `useEffect` で1度だけ呼び、結果を `LocationContext` として保持。`Calendar` の `onSelect` から `diagnoseDate()` を同期で叩いて単一日の詳細を表示。複数日比較や送信ボタンは持たない。
+- **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
+- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。5チャートを縦に並べ、末尾に `<details>` で平均値テーブル + サンプル数バナー。
 - **`components/charts/*`** — 依存ゼロの純 SVG プリミティブ 5種:
   - `BarMeter` (横バー + 中/高リスク閾値ティック)
   - `RibbonBand` (P10–P90帯 + P25–P75 濃色 + P50中央線、気温/風速)
@@ -106,9 +108,9 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **`lib/scoring.ts`** — 各リスクの閾値（rain≥0.45, hot≥0.6 等）と重み（heat 0.9, cold 0.7, wind 0.5）はここに集約。総合スコアは「100 - ペナルティ合計」で 0–100 にクランプ。
 - **`lib/comments.ts`** — `pickPrimary` で最もリスクの高い1要素を主軸に文を組み立てる。優先順は heat > cold > rain > wind（同レベル時）。湿度70%以上 + 暑さ高リスク時は別文を追加。
 - **`lib/jma-data.ts` / `lib/stations.ts`** — `fetch()` ベースでブラウザから取得。モジュール内 `Map` でセッション内キャッシュ。`public/data/jma/*.json` を更新した場合はブラウザのリロードで反映。
-- **`lib/diagnose.ts`** — クライアント側で diagnose と geocode を一箇所に集約。`searchPlaces()` は Open-Meteo を直接叩く。`diagnose()` は station 検索 → 集計 → コメントまでブラウザ内で完結。
+- **`lib/diagnose.ts`** — クライアント側 API。`searchPlaces()` は Open-Meteo を直接叩く。`prepareLocation()` は場所決定時に観測点検索 + データ取得を1回だけ実行（I/Oあり、async）。`diagnoseDate()` はその後の日付クリックごとに集計 + スコアリング + コメント生成を同期で行う（純粋関数、I/Oなし）。`diagnose()` も互換のため残してあるが現状未使用。
 - **`lib/asset-path.ts`** — `NEXT_PUBLIC_BASE_PATH` を読んで `/data/...` 等の fetch URL に basePath を前置。GitHub Pages のサブパス対応用。
-- **チャートの動的色は inline `style` で当てる** — `BarMeter` / `StackedShareBar` 等で軸別の色を切り替える際、Tailwind クラス文字列を `${var}-500` のように動的構築すると **Tailwind v3 JIT が検出できず未生成**になる（Turbopack 環境では safelist も効きが不安定だった）。SVG の `<rect>` 等も `className="fill-orange-100"` ではなく `fill={hex}` 属性を使う。固定の Tailwind クラス（テキスト・レイアウト・border 等）は普通に書いて OK。
+- **チャートの動的色 / 一部の grid 系クラスは inline `style` で当てる** — `BarMeter` / `StackedShareBar` 等で軸別の色を切り替える際、Tailwind クラス文字列を `${var}-500` のように動的構築すると **Tailwind v3 JIT が検出できず未生成**になる（Turbopack 環境では safelist も効きが不安定だった）。SVG の `<rect>` 等も `className="fill-orange-100"` ではなく `fill={hex}` 属性を使う。**さらに、新規ファイルで初めて使う `grid-cols-N`（例: `grid-cols-7`）も同様に未生成になることがある**ので、その場合は `style={{ gridTemplateColumns: "repeat(N, minmax(0, 1fr))" }}` を使う（`Calendar.tsx` で実例）。固定の Tailwind クラス（テキスト・レイアウト・border 等）は普通に書いて OK。
 - **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でカラムインデックス指定でパース。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。
 - **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで全47地点の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる。
 
@@ -117,7 +119,7 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **strict mode** 有効。`any` は error。
 - パスエイリアス: `@/*` → リポジトリルート。
 - Next.js flat ESLint config。`react-hooks/set-state-in-effect` がデフォルト error なので、useEffect の中で同期 setState を呼ばないこと（debounce timer の中で呼ぶ等）。
-- **静的エクスポート前提**: `app/api/` は使わない。Server Component から `fs` を読むのも避け（`output: "export"` 時にエラー）、`lib/*` は全て fetch ベースのブラウザ実行可能コードにする。`use client` は `CompareCards` と `CandidateForm` のみ、それ以外は静的レンダリング可能なまま保つ。
+- **静的エクスポート前提**: `app/api/` は使わない。Server Component から `fs` を読むのも避け（`output: "export"` 時にエラー）、`lib/*` は全て fetch ベースのブラウザ実行可能コードにする。`use client` は `CandidateForm` と `Calendar` のみ、それ以外（`DateDetailPanel`、`charts/*`）は静的レンダリング可能なまま保つ。
 
 ## テストスイート
 
