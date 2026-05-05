@@ -72,13 +72,15 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 
 - **`components/CandidateForm.tsx`** — 場所検索・観測点先読み・カレンダー・詳細パネルのオーケストレータ。`prepareLocation()` を場所選択時の `useEffect` で1度だけ呼び、結果を `LocationContext` として保持。`Calendar` の `onSelect` から `diagnoseDate()` を同期で叩いて単一日の詳細を表示。複数日比較や送信ボタンは持たない。
 - **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
-- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。5チャートを縦に並べ、末尾に `<details>` で平均値テーブル + サンプル数バナー。
-- **`components/charts/*`** — 依存ゼロの純 SVG プリミティブ 5種:
-  - `BarMeter` (横バー + 中/高リスク閾値ティック)
-  - `RibbonBand` (P10–P90帯 + P25–P75 濃色 + P50中央線、気温/風速)
-  - `StackedShareBar` (晴れ/小雨/雨/大雨の100%スタック)
-  - `YearHeatmap` (30年分のセル、年ごとの雨日数で indigo の濃淡)
-  - `OffsetSparkline` (±7日 tmax/tmin もしくは雨日割合)
+- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。トップに要約カード3枚、続いてメインの「降水量の構成」、気温分布、年ごとの雨日数（俯瞰＋時系列バー）、±7日推移、風速分布を縦に並べ、末尾に `<details>` で平均値テーブル。サンプル数バナーは要約カード直下。
+- **`components/charts/*`** — 依存ゼロの純 SVG プリミティブ 7種:
+  - `StatCards` (雨日割合・気温帯・風速帯の3カード要約。リスクピル付き)
+  - `BarMeter` (横バー + 中/高リスク閾値ティック、現状未使用)
+  - `RibbonBand` (P10–P90帯 + P25–P75 濃色 + P50中央線。**P10/P50/P90 の数値直書き**＋軸ティック5〜7個＋閾値タグ。気温/風速)
+  - `StackedShareBar` (晴れ/小雨/雨/大雨の100%スタック。`totalDays`/`sampleN` で日数換算を表示。h-12 とヘッドライン「X% が雨」付き)
+  - `YearHeatmap` (30年分のセル。**全セルに雨日数を直接表示**＋最多年に黄枠＋数値レンジ凡例)
+  - `YearBars` (30年の雨日数を縦棒で時系列表示。中央値ライン、上位25%濃色、下位25%淡色、最多/最少年キャプション)
+  - `OffsetSparkline` (±7日 tmax/tmin もしくは雨日割合。Y軸ラベル＋候補日に黄背景帯＋値ラベル)
 - 配色は **heat=橙 / cold=青 / rain=indigo / wind=紫** で固定（赤緑コンフリクト回避）。総合スコアの帯背景のみ emerald/amber/rose（独立指標なので OK）。
 
 ## 重要な設計判断
