@@ -96,7 +96,7 @@ node scripts/seed_dev_data.mjs   # 47地点分の合成データを public/data/
 公式APIなし。obsdl の HTML 月次表（`daily_s1.php?prec_no=&block_no=&year=&month=`）をパースして CSV 相当の値を抽出。JMA は「サーバ高頻度アクセス禁止」を明記しているため、`fetch_jma.py` は **3秒+ジッタの間隔** とtenacityでの指数バックオフでレート制御。
 
 ### 観測地点の規模（2026-05 拡張）
-気象台等 (s1, full data) **159地点** + アメダス (a1, partial data) **1519地点** = **計1678地点**を `scripts/jma_stations.py` の `STATIONS` に登録。`scripts/discover_stations.py` で JMA 都府県別 select ページの `viewPoint()` 呼び出しを巡回スクレイプして自動生成。`fetch_jma.py` の HTML パーサは `<table id="tablefix1">` のヘッダー行を解釈して動的に column→field マッピングを構築（s1 / a1 共通）。アメダスは観測項目が地点ごとに異なる（湿度・日照欠落地点あり）ため、欠落フィールドは null として扱う。**初期 47地点（都道府県の地方気象台）は id・順序を維持**して後方互換を保ち、新規 1631 地点は末尾に追加。
+気象台等 (s1, full data) **159地点**を `scripts/jma_stations.py` の `STATIONS` に登録（地方気象台 + 特別地域気象観測所 + 残存測候所）。`scripts/discover_stations.py` で JMA 都府県別 select ページの `viewPoint()` 呼び出しを巡回スクレイプして自動生成し、`kind="s1"` のみ採用。`fetch_jma.py` の HTML パーサは `<table id="tablefix1">` のヘッダー行を解釈して動的に column→field マッピングを構築（s1 / a1 共通実装、a1 用は将来拡張に備えて残置）。**初期 47地点（都道府県の地方気象台）は id・順序を維持**して後方互換を保ち、新規 112 地点は末尾に追加。データ量は 159 × ~320KB ≈ 約50MB で GitHub Pages 推奨内（100MB 以下）。
 
 ### なぜ ±7日を集計するか
 特定の1日30サンプルだけだと外れ値の影響が大きい。±7日 × 30年 = 約450サンプルにすると、その時期の典型的な天候パターンが安定して見える。アドバイスメモ参照（"その日だけではなく±7日で見る"）。
@@ -143,17 +143,17 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 
 ## 既知の制約
 
-1. **観測データは部分的**（2026-05時点）— `STATIONS` には 1678地点登録済みだが、`public/data/jma/*.json` で実データが揃っているのは初期47地点のみ（合成データ）。残り 1631地点は `fetch_jma.py --all` をバックグラウンド運用で順次取得（~10日）。未取得地点を選ぶと「観測地点 X のデータが取得できません」エラー。
-2. **アメダス地点の観測項目限定** — a1 地点は湿度・日照が欠落することがあり、`stats.avgHumidity` が `null` のときコメント・チャートが省略される。`Aggregated.avg{Tmax,Tmin,Wind}` は集計対象が0件のとき `0` を返すため、`scoring.ts` の閾値で偽陽性を避ける設計。
+1. **観測データは部分的**（2026-05時点）— `STATIONS` には s1 159地点登録済みだが、`public/data/jma/*.json` の実データが揃っているのは初期47地点のみ（合成データ）。残り 112地点は `fetch_jma.py --all` をバックグラウンド運用で順次取得（~1.6日）。未取得地点を選ぶと「観測地点 X のデータが取得できません」エラー。
+2. **アメダス (a1) 未対応** — `STATIONS` は s1 のみ。観測項目が地点ごとに異なる a1 1519地点は `discover_stations.py` の出力には含まれるが `jma_stations.py` には取り込んでいない（湿度・日照欠落地点が大半で日取り判定に寄与しないため）。`fetch_jma.py` の a1 パーサは将来拡張用に残置。
 3. **用途別スコアなし** — MVP汎用スコアのみ。結婚式/前撮り/キャンプ別の重み付けは未実装。
 4. **±2週間ランキング未実装** — 候補日のピンポイント比較のみ。
 5. **台風接近傾向データなし** — 別データソース要。
-6. **データ容量** — 全 1678地点 × ~320KB ≈ 540MB。GitHub Pages 推奨 100MB を超えるため、Phase D で gzip 圧縮 (`*.json.gz` + `DecompressionStream`) または外部 CDN への移行を検討予定。
 
 ## 拡張のヒント
 
 - **新しい観測点追加（個別）**: `scripts/jma_stations.py` の `STATIONS` リストに追記 → `uv run python -m build_dataset --registry-only` で `stations.json` 再生成 → `fetch_jma.py --station <id>` で実データ取得 → `build_dataset.py --station <id>` でJSON生成。
-- **JMA 全地点の自動発見と再取り込み**: `cd scripts && uv run python -m discover_stations` で `viewPoint()` を再スクレイプ → `discover_output.py` を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に貼替。既存47件の id は `discover_stations.py` の dedup ロジックで保護される。
-- **大量データ取得運用**: `cd scripts && nohup uv run python -m fetch_jma --all --years 30 > fetch.log 2>&1 &` でバックグラウンド実行（~10日、3秒+ジッタのレート制御）。中断時は同コマンドで再開可能（`.cache/<id>/YYYY-MM.html` 再利用）。完了後 `uv run python -m build_dataset --all` で per-station JSON 再生成。
+- **JMA 全地点の自動発見と再取り込み**: `cd scripts && uv run python -m discover_stations` で `viewPoint()` を再スクレイプ → `discover_output.py` の **`kind="s1"` のみ**（または必要に応じて a1 も）を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に貼替。既存47件の id は `discover_stations.py` の dedup ロジックで保護される。
+- **大量データ取得運用**: `cd scripts && nohup uv run python -m fetch_jma --all --years 30 > fetch.log 2>&1 &` でバックグラウンド実行（s1 159地点で ~1.6日、3秒+ジッタのレート制御）。中断時は同コマンドで再開可能（`.cache/<id>/YYYY-MM.html` 再利用）。完了後 `uv run python -m build_dataset --all` で per-station JSON 再生成。
+- **AMeDAS (a1) 拡張**: 将来 a1 地点を追加する場合は `scripts/discover_output.py` の `kind="a1"` 行を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に追記し、`fetch_jma --all` 再実行。a1 パーサ (`_build_field_map`) は実装済み、地点ごとに観測項目が異なる点に注意（湿度・日照欠落あり、`scoring.ts` の閾値判定で偽陽性は回避済み）。
 - **用途別スコア**: `lib/scoring.ts` に `score(stats, useCase: 'wedding' | ...)` のオーバーロード追加。重み係数を用途別に。
 - **台風データ**: 気象庁の「台風経路図」CSVや別データソース（Best Track）を `scripts/fetch_typhoon.py` として追加し、月別接近確率を集計。
