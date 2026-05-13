@@ -157,3 +157,28 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **AMeDAS (a1) 拡張**: 将来 a1 地点を追加する場合は `scripts/discover_output.py` の `kind="a1"` 行を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に追記し、`fetch_jma --all` 再実行。a1 パーサ (`_build_field_map`) は実装済み、地点ごとに観測項目が異なる点に注意（湿度・日照欠落あり、`scoring.ts` の閾値判定で偽陽性は回避済み）。
 - **用途別スコア**: `lib/scoring.ts` に `score(stats, useCase: 'wedding' | ...)` のオーバーロード追加。重み係数を用途別に。
 - **台風データ**: 気象庁の「台風経路図」CSVや別データソース（Best Track）を `scripts/fetch_typhoon.py` として追加し、月別接近確率を集計。
+
+## 更新運用
+
+### 年次データ更新（自動 / GitHub Actions）
+- `.github/workflows/refresh-jma-data.yml` が **毎年 2/7 00:00 UTC** に起動
+- 前年分の追加 + 直近3ヶ月の後追い訂正再フェッチ
+- `auto/refresh-jma-data` ブランチに PR が自動作成される → 内容確認後マージ → `deploy.yml` で本番反映
+- 手動起動: GitHub Actions タブ → `Refresh JMA data (annual)` → Run workflow（`force_recent_months` で再取得月数を変更可能）
+- 必要な GH 設定: Settings → Actions → General → ① Workflow permissions: **Read and write** ② **Allow GitHub Actions to create and approve pull requests** を有効化
+
+### 観測地点リスト監査（四半期 / GitHub Actions）
+- `.github/workflows/audit-stations.yml` が **1/1, 4/1, 7/1, 10/1 00:00 UTC** に起動
+- `discover_stations.py --rebuild` で JMA select ページを再スクレイプ → `STATIONS` レジストリと s1 のみで差分比較
+- 新設・廃止があれば Issue を自動作成（label `maintenance, jma-audit`）
+- **コードは自動編集しない**。採否は人間判断（`discover_output.py` の取り込み → `jma_stations.py` 編集）
+
+### 手動更新（緊急時 / Actions 障害時）
+```bash
+cd scripts && bash refresh-local.sh
+# 完了後:
+npm run lint && npm run build
+git add public/data/jma scripts/jma_stations.py public/data/stations.json
+git commit -m "JMA データ更新（手動）"
+```
+直近3ヶ月再フェッチがデフォルト。多めに取り直す場合は `FORCE_RECENT_MONTHS=12 bash scripts/refresh-local.sh`。

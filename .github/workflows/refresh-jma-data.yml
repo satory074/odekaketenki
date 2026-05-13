@@ -1,0 +1,132 @@
+name: Refresh JMA data (annual)
+
+on:
+  schedule:
+    # Feb 7 at 00:00 UTC — JMA finalizes prior year's data by early February
+    - cron: "0 0 7 2 *"
+  workflow_dispatch:
+    inputs:
+      force_recent_months:
+        description: "再フェッチする直近月数（後追い訂正対応）"
+        default: "3"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Python deps
+        working-directory: scripts
+        run: uv sync
+
+      - name: Restore JMA HTML cache
+        uses: actions/cache@v4
+        with:
+          path: scripts/.cache
+          key: jma-cache-${{ github.run_id }}
+          restore-keys: |
+            jma-cache-
+
+      - name: Drop recent N months from cache (post-hoc revision capture)
+        working-directory: scripts
+        env:
+          FORCE_RECENT_MONTHS: ${{ github.event.inputs.force_recent_months || '3' }}
+        run: |
+          uv run python <<'PY'
+          import os
+          from datetime import date
+          from pathlib import Path
+          n = int(os.environ.get("FORCE_RECENT_MONTHS", "3"))
+          today = date.today()
+          recent = set()
+          y, m = today.year, today.month
+          for _ in range(n + 1):
+              recent.add((y, m))
+              m -= 1
+              if m == 0:
+                  y, m = y - 1, 12
+          dropped = 0
+          for f in Path(".cache").glob("*/*.html"):
+              try:
+                  yy, mm = map(int, f.stem.split("-"))
+              except ValueError:
+                  continue
+              if (yy, mm) in recent:
+                  f.unlink()
+                  dropped += 1
+          print(f"dropped {dropped} stale HTML files (recent {n}+1 months)")
+          PY
+
+      - name: Fetch JMA observations
+        working-directory: scripts
+        run: uv run python -m fetch_jma --all --years 30
+
+      - name: Build per-station JSON
+        working-directory: scripts
+        run: uv run python -m build_dataset --all
+
+      - name: Lint + production build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /odekaketenki
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: Show data diff stats
+        run: |
+          du -sh public/data/jma
+          ls public/data/jma | wc -l
+
+      - name: Open / update PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: auto/refresh-jma-data
+          title: "🤖 JMA データ自動更新 (run ${{ github.run_id }})"
+          commit-message: |
+            JMA データ自動更新 (run ${{ github.run_id }})
+
+            前年分の追加 + 直近${{ github.event.inputs.force_recent_months || '3' }}ヶ月の再フェッチ。
+            lint + 静的エクスポート通過済。
+          body: |
+            気象庁の最新観測値を取り込みました。
+
+            ## 取り込み内容
+            - 前年分（30年ローリングウィンドウ末尾）
+            - 直近 **${{ github.event.inputs.force_recent_months || '3' }}** ヶ月の再フェッチ（後追い訂正対応）
+
+            ## 自動チェック
+            - ✅ `npm run lint` 通過
+            - ✅ `NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build` 通過
+
+            ## マージ前確認
+            - [ ] 差分が想定範囲か（既存月の値が大きく変動していないか）
+            - [ ] `npm run dev` で抜き取り検証（東京・軽井沢など）
+            - [ ] `du -sh public/data/jma` が 100MB 以内
+
+            ---
+            **トリガ**: ${{ github.event_name }}
+            **実行 ID**: ${{ github.run_id }}
+          labels: |
+            automation
+            jma-data
+          delete-branch: false

@@ -1,0 +1,98 @@
+name: Audit JMA station list (quarterly)
+
+on:
+  schedule:
+    # 1/1, 4/1, 7/1, 10/1 at 00:00 UTC
+    - cron: "0 0 1 1,4,7,10 *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        working-directory: scripts
+        run: uv sync
+
+      - name: Discover stations from JMA (force refresh)
+        working-directory: scripts
+        run: uv run python -m discover_stations --rebuild
+
+      - name: Compute diff vs current STATIONS
+        id: diff
+        working-directory: scripts
+        run: |
+          uv run python <<'PY' > diff_report.md
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, ".")
+          from jma_stations import STATIONS as CURRENT
+
+          discovered = json.load(open(".cache/discover/raw.json"))
+          # Audit only s1 (a1 intentionally excluded under current policy)
+          d_s1 = {(s["prec_no"], s["block_no"]): s for s in discovered if s["kind"] == "s1"}
+          c_s1 = {(s.prec_no, s.block_no): s for s in CURRENT if s.kind == "s1"}
+
+          added = [d_s1[k] for k in d_s1.keys() - c_s1.keys()]
+          removed = [c_s1[k] for k in c_s1.keys() - d_s1.keys()]
+
+          if not added and not removed:
+              print("# 監査結果: 変化なし")
+              print("")
+              print("JMA s1 地点リストに変更ありません。")
+              sys.exit(0)
+
+          print("# JMA 観測地点に変更を検知")
+          print("")
+          if added:
+              print(f"## 新設 ({len(added)}件)")
+              print("")
+              for s in added:
+                  print(f"- {s['name']}（{s['prefecture']}、prec_no={s['prec_no']}, block_no={s['block_no']}, lat={s['lat']}, lng={s['lng']}）")
+              print("")
+          if removed:
+              print(f"## 廃止 ({len(removed)}件)")
+              print("")
+              for s in removed:
+                  print(f"- {s.name}（{s.prefecture}、prec_no={s.prec_no}, block_no={s.block_no}）")
+              print("")
+          print("---")
+          print("")
+          print("**対応手順**:")
+          print("")
+          print("1. `cd scripts && uv run python -m discover_stations --rebuild`")
+          print("2. 生成された `discover_output.py` の **s1 行のみ** を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に貼替")
+          print("3. 廃止地点は手動削除（観測データは残しても良いがフレッシュではなくなる）")
+          print("4. `uv run python -m build_dataset --registry-only` で `stations.json` 再生成")
+          print("5. `fetch_jma --all` で新規地点の観測データ取得")
+          PY
+          if grep -q "変更を検知" diff_report.md; then
+            echo "has_diff=true" >> "$GITHUB_OUTPUT"
+            cat diff_report.md
+          else
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+            cat diff_report.md
+          fi
+
+      - name: Open issue on diff
+        if: steps.diff.outputs.has_diff == 'true'
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "🔍 JMA 観測地点リストに変更を検知"
+          content-filepath: scripts/diff_report.md
+          labels: |
+            maintenance
+            jma-audit
