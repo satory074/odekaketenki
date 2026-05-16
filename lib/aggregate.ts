@@ -1,6 +1,5 @@
 import type {
   Aggregated,
-  DailyOffset,
   DailyRecord,
   Percentiles,
   RainShare,
@@ -125,7 +124,6 @@ export function aggregateAroundDate(
     yearAcc.set(y, { tmax: [], tmin: [], prcp: [] });
   }
 
-  const byOffset: DailyOffset[] = [];
   const samples: SampleRecord[] = [];
 
   const finiteOrNull = (v: number | null | undefined): number | null =>
@@ -135,65 +133,51 @@ export function aggregateAroundDate(
     const key = shiftedKey(baseKey, off);
     const day: DailyRecord | undefined = station.daily[key];
 
-    const offTmax: number[] = [];
-    const offTmin: number[] = [];
-    const offPrcp: number[] = [];
+    if (!day) continue;
 
-    if (day) {
-      for (let i = 0; i < station.years.length; i++) {
-        const year = station.years[i];
-        const acc = yearAcc.get(year);
-        if (!acc) continue;
+    for (let i = 0; i < station.years.length; i++) {
+      const year = station.years[i];
+      const acc = yearAcc.get(year);
+      if (!acc) continue;
 
-        const tmaxV = day.tmax?.[i];
-        const tminV = day.tmin?.[i];
-        const tavgV = day.tavg?.[i];
-        const prcpV = day.prcp?.[i];
-        const sunshineV = day.sunshine?.[i];
-        const windV = day.wind?.[i];
-        const humidityV = day.humidity?.[i];
+      const tmaxV = day.tmax?.[i];
+      const tminV = day.tmin?.[i];
+      const tavgV = day.tavg?.[i];
+      const prcpV = day.prcp?.[i];
+      const sunshineV = day.sunshine?.[i];
+      const windV = day.wind?.[i];
+      const humidityV = day.humidity?.[i];
 
-        if (tmaxV != null && Number.isFinite(tmaxV)) {
-          tmax.push(tmaxV);
-          acc.tmax.push(tmaxV);
-          offTmax.push(tmaxV);
-        }
-        if (tminV != null && Number.isFinite(tminV)) {
-          tmin.push(tminV);
-          acc.tmin.push(tminV);
-          offTmin.push(tminV);
-        }
-        if (tavgV != null && Number.isFinite(tavgV)) tavg.push(tavgV);
-        if (prcpV != null && Number.isFinite(prcpV)) {
-          prcp.push(prcpV);
-          acc.prcp.push(prcpV);
-          offPrcp.push(prcpV);
-        }
-        if (sunshineV != null && Number.isFinite(sunshineV)) sunshine.push(sunshineV);
-        if (windV != null && Number.isFinite(windV)) wind.push(windV);
-        if (humidityV != null && Number.isFinite(humidityV)) humidity.push(humidityV);
-
-        samples.push({
-          year,
-          offset: off,
-          monthDay: key,
-          tmax: finiteOrNull(tmaxV),
-          tmin: finiteOrNull(tminV),
-          tavg: finiteOrNull(tavgV),
-          prcp: finiteOrNull(prcpV),
-          sunshine: finiteOrNull(sunshineV),
-          wind: finiteOrNull(windV),
-          humidity: finiteOrNull(humidityV),
-        });
+      if (tmaxV != null && Number.isFinite(tmaxV)) {
+        tmax.push(tmaxV);
+        acc.tmax.push(tmaxV);
       }
-    }
+      if (tminV != null && Number.isFinite(tminV)) {
+        tmin.push(tminV);
+        acc.tmin.push(tminV);
+      }
+      if (tavgV != null && Number.isFinite(tavgV)) tavg.push(tavgV);
+      if (prcpV != null && Number.isFinite(prcpV)) {
+        prcp.push(prcpV);
+        acc.prcp.push(prcpV);
+      }
+      if (sunshineV != null && Number.isFinite(sunshineV)) sunshine.push(sunshineV);
+      if (windV != null && Number.isFinite(windV)) wind.push(windV);
+      if (humidityV != null && Number.isFinite(humidityV)) humidity.push(humidityV);
 
-    byOffset.push({
-      offset: off,
-      tmax: avg(offTmax),
-      tmin: avg(offTmin),
-      rainProb: fraction(offPrcp, (v) => v >= RAIN_MM),
-    });
+      samples.push({
+        year,
+        offset: off,
+        monthDay: key,
+        tmax: finiteOrNull(tmaxV),
+        tmin: finiteOrNull(tminV),
+        tavg: finiteOrNull(tavgV),
+        prcp: finiteOrNull(prcpV),
+        sunshine: finiteOrNull(sunshineV),
+        wind: finiteOrNull(windV),
+        humidity: finiteOrNull(humidityV),
+      });
+    }
   }
 
   const byYear: YearOutcome[] = station.years.map((year) => {
@@ -236,7 +220,6 @@ export function aggregateAroundDate(
     windDist: percentilesOf(wind),
     rainShare: rainShareOf(prcp),
     byYear,
-    byOffset,
     samples,
     expectedSampleDays,
     yearRange,

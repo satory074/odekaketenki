@@ -51,13 +51,6 @@ export type YearOutcome = {
   tminMean: number;
 };
 
-export type DailyOffset = {
-  offset: number;
-  tmax: number;
-  tmin: number;
-  rainProb: number;
-};
-
 export type SampleRecord = {
   year: number;
   offset: number;
@@ -89,7 +82,6 @@ export type Aggregated = {
   windDist: Percentiles;
   rainShare: RainShare;
   byYear: YearOutcome[];
-  byOffset: DailyOffset[];
   samples: SampleRecord[];
   expectedSampleDays: number;
   yearRange: { start: number; end: number };

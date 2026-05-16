@@ -3,7 +3,6 @@ import { RibbonBand } from "./charts/RibbonBand";
 import { StackedShareBar } from "./charts/StackedShareBar";
 import { YearHeatmap } from "./charts/YearHeatmap";
 import { YearBars } from "./charts/YearBars";
-import { OffsetSparkline } from "./charts/OffsetSparkline";
 import { SamplesTable } from "./charts/SamplesTable";
 import { StatCards } from "./charts/StatCards";
 
@@ -105,28 +104,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         </div>
       </section>
 
-      {/* ⑥ ±7日推移 */}
-      <section className="space-y-3 rounded-md bg-white p-3 ring-1 ring-stone-200">
-        <h4 className="text-xs font-semibold text-stone-700">±7日推移（30年平均）</h4>
-        <div>
-          <p className="mb-1 flex items-center gap-3 text-[10px] text-stone-500">
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 bg-orange-500" /> 最高気温
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-0.5 w-3 bg-sky-500" /> 最低気温
-            </span>
-            <span className="ml-auto text-stone-400">候補日は黄背景で強調</span>
-          </p>
-          <OffsetSparkline data={stats.byOffset} variant="temp" />
-        </div>
-        <div>
-          <p className="mb-1 text-[10px] text-stone-500">雨日割合</p>
-          <OffsetSparkline data={stats.byOffset} variant="rain" />
-        </div>
-      </section>
-
-      {/* ⑦ 風速 */}
+      {/* ⑥ 風速 */}
       <section className="space-y-2 rounded-md bg-white p-3 ring-1 ring-stone-200">
         <h4 className="text-xs font-semibold text-stone-700">風速の分布</h4>
         <RibbonBand
