@@ -39,7 +39,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
       {/* ② 要約カード */}
       <StatCards stats={stats} scores={scores} />
 
-      {/* ⑨ サンプル数バナー（早めに見せる） */}
+      {/* ③ サンプル数バナー */}
       <p className="text-[11px] text-stone-500">
         集計根拠: <span className="font-mono tabular-nums">{stats.n}</span> 観測日
         （30年 × 候補日±{WINDOW_DAYS}日 = <span className="font-mono tabular-nums">{stats.expectedSampleDays}</span>日中）
@@ -49,7 +49,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         ／ 集計年: {stats.yearRange.start}–{stats.yearRange.end}
       </p>
 
-      {/* ③ 降水量の構成（メイン） */}
+      {/* ④ 降水量の構成（メイン） */}
       <section className="space-y-3 rounded-md bg-white p-4 ring-1 ring-stone-200 shadow-sm">
         <div>
           <h4 className="text-sm font-semibold text-stone-800">降水量の構成</h4>
@@ -64,7 +64,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         />
       </section>
 
-      {/* ④ 気温の分布 */}
+      {/* ⑤ 気温の分布 */}
       <section className="space-y-3 rounded-md bg-white p-3 ring-1 ring-stone-200">
         <div>
           <h4 className="text-xs font-semibold text-stone-700">気温の分布（30年・±7日窓）</h4>
@@ -90,7 +90,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         />
       </section>
 
-      {/* ⑤ 年ごとの傾向 */}
+      {/* ⑥ 年ごとの傾向 */}
       <section className="space-y-3 rounded-md bg-white p-3 ring-1 ring-stone-200">
         <div>
           <h4 className="text-xs font-semibold text-stone-700">年ごとの雨日数（30年）</h4>
@@ -104,7 +104,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         </div>
       </section>
 
-      {/* ⑥ 風速 */}
+      {/* ⑦ 風速 */}
       <section className="space-y-2 rounded-md bg-white p-3 ring-1 ring-stone-200">
         <h4 className="text-xs font-semibold text-stone-700">風速の分布</h4>
         <RibbonBand
@@ -120,7 +120,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         />
       </section>
 
-      {/* ⑧ 数値で見る */}
+      {/* ⑧ 数値で見る（折りたたみ） */}
       <details className="rounded-md bg-white p-3 ring-1 ring-stone-200">
         <summary className="cursor-pointer text-xs font-semibold text-stone-700">
           数値で見る（平均値）
@@ -163,7 +163,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         </dl>
       </details>
 
-      {/* ⑩ 全観測データ一覧 */}
+      {/* ⑨ 全観測データ一覧（折りたたみ） */}
       <details className="rounded-md bg-white p-3 ring-1 ring-stone-200">
         <summary className="cursor-pointer text-xs font-semibold text-stone-700">
           全観測データ一覧（{stats.samples.length}件）

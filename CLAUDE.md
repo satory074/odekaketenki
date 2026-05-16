@@ -35,7 +35,7 @@ uv run python -m discover_stations                            # JMA select ペ�
 ```bash
 node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成データを public/data/jma/ に書き出し
 ```
-気象庁実データ取得前のデモ用。緯度ベースで気候を近似生成。**現状は s1 159地点とも実データに差し替え済み**（コミット `f7c9fac`）なので新規地点追加時のフォールバック用。
+気象庁実データ取得前のデモ用。緯度ベースで気候を近似生成。**現状は s1 159地点とも実データに差し替え済み**なので新規地点追加時のフォールバック用。
 
 ## アーキテクチャ
 
@@ -79,7 +79,7 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 - **`lib/regions.ts`** — `prefecture → Region` 対応の純データ（6地域分類）。
 - **`lib/recent-places.ts`** — `localStorage` の薄いラッパー（`loadRecentPlaces` / `saveRecentPlace` / `clearRecentPlaces`）。SSR セーフ、quota エラーは `try/catch` で握りつぶす。
 - **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
-- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。トップに要約カード3枚、続いてメインの「降水量の構成」、気温分布、年ごとの雨日数（俯瞰＋時系列バー）、風速分布を縦に並べ、末尾に `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）。サンプル数バナーは要約カード直下。
+- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。**縦並びは重要度降順**（コメント → 要約カード → サンプル数バナー → 主役の降水量構成 → 気温分布 → 年次傾向 → 風速 → 折りたたみ詳細）。末尾の `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）は補助情報。新しいセクションを追加する際もこの優先順位を維持し、主役（降水量の構成）を中央より下に押し下げないこと。
 - **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 7種:
   - `StatCards` (雨日割合・気温帯・風速帯の3カード要約。リスクピル付き)
   - `BarMeter` (横バー + 中/高リスク閾値ティック、現状未使用)
@@ -95,7 +95,7 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 ### なぜ気象庁 obsdl を直接スクレイピングしているか
 公式APIなし。obsdl の HTML 月次表（`daily_s1.php?prec_no=&block_no=&year=&month=`）をパースして CSV 相当の値を抽出。JMA は「サーバ高頻度アクセス禁止」を明記しているため、`fetch_jma.py` は **3秒+ジッタの間隔** とtenacityでの指数バックオフでレート制御。
 
-### 観測地点の規模（2026-05 拡張）
+### 観測地点の規模（s1 159地点）
 気象台等 (s1, full data) **159地点**を `scripts/jma_stations.py` の `STATIONS` に登録（地方気象台 + 特別地域気象観測所 + 残存測候所）。`scripts/discover_stations.py` で JMA 都府県別 select ページの `viewPoint()` 呼び出しを巡回スクレイプして自動生成し、`kind="s1"` のみ採用。`fetch_jma.py` の HTML パーサは `<table id="tablefix1">` のヘッダー行を解釈して動的に column→field マッピングを構築（s1 / a1 共通実装、a1 用は将来拡張に備えて残置）。**初期 47地点（都道府県の地方気象台）は id・順序を維持**して後方互換を保ち、新規 112 地点は末尾に追加。データ量は実測 **約 70MB**（`du -sh public/data/jma`）で GitHub Pages 推奨内（100MB 以下）。
 
 ### なぜ ±7日を集計するか
@@ -153,8 +153,8 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **JMA 全地点の自動発見と再取り込み**: `cd scripts && uv run python -m discover_stations` で `viewPoint()` を再スクレイプ → `discover_output.py` の **`kind="s1"` のみ**（または必要に応じて a1 も）を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に貼替。既存47件の id は `discover_stations.py` の dedup ロジックで保護される。
 - **大量データ取得運用**: `cd scripts && nohup uv run python -m fetch_jma --all --years 30 > fetch.log 2>&1 &` でバックグラウンド実行（s1 159地点で ~1.6日、3秒+ジッタのレート制御）。中断時は同コマンドで再開可能（`.cache/<id>/YYYY-MM.html` 再利用）。完了後 `uv run python -m build_dataset --all` で per-station JSON 再生成。
 - **AMeDAS (a1) 拡張**: 将来 a1 地点を追加する場合は `scripts/discover_output.py` の `kind="a1"` 行を `jma_stations.py` の `DISCOVERED_BLOCK_START`/`END` 間に追記し、`fetch_jma --all` 再実行。a1 パーサ (`_build_field_map`) は実装済み、地点ごとに観測項目が異なる点に注意（湿度・日照欠落あり、`scoring.ts` の閾値判定で偽陽性は回避済み）。
-- **用途別スコア**: `lib/scoring.ts` に `score(stats, useCase: 'wedding' | ...)` のオーバーロード追加。重み係数を用途別に。
-- **台風データ**: 気象庁の「台風経路図」CSVや別データソース（Best Track）を `scripts/fetch_typhoon.py` として追加し、月別接近確率を集計。
+
+用途別スコア・台風接近データなど構想止まりの拡張は「既知の制約」を参照（実装ポインタが必要になった時点で本節に移す）。
 
 ## 更新運用
 
