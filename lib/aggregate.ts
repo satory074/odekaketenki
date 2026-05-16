@@ -5,7 +5,6 @@ import type {
   RainShare,
   SampleRecord,
   StationData,
-  YearOutcome,
 } from "./types";
 
 const RAIN_MM = 1.0;
@@ -97,12 +96,6 @@ export function parseIsoDate(iso: string): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
-type YearAcc = {
-  tmax: number[];
-  tmin: number[];
-  prcp: number[];
-};
-
 export function aggregateAroundDate(
   station: StationData,
   isoDate: string,
@@ -119,11 +112,6 @@ export function aggregateAroundDate(
   const wind: number[] = [];
   const humidity: number[] = [];
 
-  const yearAcc = new Map<number, YearAcc>();
-  for (const y of station.years) {
-    yearAcc.set(y, { tmax: [], tmin: [], prcp: [] });
-  }
-
   const samples: SampleRecord[] = [];
 
   const finiteOrNull = (v: number | null | undefined): number | null =>
@@ -137,8 +125,6 @@ export function aggregateAroundDate(
 
     for (let i = 0; i < station.years.length; i++) {
       const year = station.years[i];
-      const acc = yearAcc.get(year);
-      if (!acc) continue;
 
       const tmaxV = day.tmax?.[i];
       const tminV = day.tmin?.[i];
@@ -148,19 +134,10 @@ export function aggregateAroundDate(
       const windV = day.wind?.[i];
       const humidityV = day.humidity?.[i];
 
-      if (tmaxV != null && Number.isFinite(tmaxV)) {
-        tmax.push(tmaxV);
-        acc.tmax.push(tmaxV);
-      }
-      if (tminV != null && Number.isFinite(tminV)) {
-        tmin.push(tminV);
-        acc.tmin.push(tminV);
-      }
+      if (tmaxV != null && Number.isFinite(tmaxV)) tmax.push(tmaxV);
+      if (tminV != null && Number.isFinite(tminV)) tmin.push(tminV);
       if (tavgV != null && Number.isFinite(tavgV)) tavg.push(tavgV);
-      if (prcpV != null && Number.isFinite(prcpV)) {
-        prcp.push(prcpV);
-        acc.prcp.push(prcpV);
-      }
+      if (prcpV != null && Number.isFinite(prcpV)) prcp.push(prcpV);
       if (sunshineV != null && Number.isFinite(sunshineV)) sunshine.push(sunshineV);
       if (windV != null && Number.isFinite(windV)) wind.push(windV);
       if (humidityV != null && Number.isFinite(humidityV)) humidity.push(humidityV);
@@ -179,20 +156,6 @@ export function aggregateAroundDate(
       });
     }
   }
-
-  const byYear: YearOutcome[] = station.years.map((year) => {
-    const acc = yearAcc.get(year)!;
-    let maxPrcp = 0;
-    for (const v of acc.prcp) if (v > maxPrcp) maxPrcp = v;
-    return {
-      year,
-      n: acc.prcp.length,
-      rainDays: acc.prcp.filter((v) => v >= RAIN_MM).length,
-      maxPrcp,
-      tmaxMean: avg(acc.tmax),
-      tminMean: avg(acc.tmin),
-    };
-  });
 
   const expectedSampleDays = (windowDays * 2 + 1) * station.years.length;
 
@@ -219,7 +182,6 @@ export function aggregateAroundDate(
     tminDist: percentilesOf(tmin),
     windDist: percentilesOf(wind),
     rainShare: rainShareOf(prcp),
-    byYear,
     samples,
     expectedSampleDays,
     yearRange,

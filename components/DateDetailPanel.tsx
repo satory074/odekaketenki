@@ -2,8 +2,6 @@ import type { DiagnoseResult } from "@/lib/types";
 import { RibbonBand } from "./charts/RibbonBand";
 import { TempRibbonBand } from "./charts/TempRibbonBand";
 import { StackedShareBar } from "./charts/StackedShareBar";
-import { YearHeatmap } from "./charts/YearHeatmap";
-import { YearBars } from "./charts/YearBars";
 import { SamplesTable } from "./charts/SamplesTable";
 import { StatCards } from "./charts/StatCards";
 
@@ -85,21 +83,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         />
       </section>
 
-      {/* ⑥ 年ごとの傾向 */}
-      <section className="space-y-3 rounded-md bg-white p-3 ring-1 ring-stone-200">
-        <div>
-          <h4 className="text-xs font-semibold text-stone-700">年ごとの雨日数（30年）</h4>
-          <p className="text-[10px] text-stone-500">
-            上：俯瞰（年配置）／下：時系列バー（最近の傾向）
-          </p>
-        </div>
-        <YearHeatmap data={stats.byYear} windowDays={WINDOW_DAYS} />
-        <div className="border-t border-stone-100 pt-3">
-          <YearBars data={stats.byYear} />
-        </div>
-      </section>
-
-      {/* ⑦ 風速 */}
+      {/* ⑥ 風速 */}
       <section className="space-y-2 rounded-md bg-white p-3 ring-1 ring-stone-200">
         <h4 className="text-xs font-semibold text-stone-700">風速の分布</h4>
         <RibbonBand
@@ -115,7 +99,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         />
       </section>
 
-      {/* ⑧ 数値で見る（折りたたみ） */}
+      {/* ⑦ 数値で見る（折りたたみ） */}
       <details className="rounded-md bg-white p-3 ring-1 ring-stone-200">
         <summary className="cursor-pointer text-xs font-semibold text-stone-700">
           数値で見る（平均値）
@@ -158,7 +142,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
         </dl>
       </details>
 
-      {/* ⑨ 全観測データ一覧（折りたたみ） */}
+      {/* ⑧ 全観測データ一覧（折りたたみ） */}
       <details className="rounded-md bg-white p-3 ring-1 ring-stone-200">
         <summary className="cursor-pointer text-xs font-semibold text-stone-700">
           全観測データ一覧（{stats.samples.length}件）

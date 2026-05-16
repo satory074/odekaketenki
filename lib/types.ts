@@ -42,15 +42,6 @@ export type RainShare = {
   heavy: number;
 };
 
-export type YearOutcome = {
-  year: number;
-  n: number;
-  rainDays: number;
-  maxPrcp: number;
-  tmaxMean: number;
-  tminMean: number;
-};
-
 export type SampleRecord = {
   year: number;
   offset: number;
@@ -81,7 +72,6 @@ export type Aggregated = {
   tminDist: Percentiles;
   windDist: Percentiles;
   rainShare: RainShare;
-  byYear: YearOutcome[];
   samples: SampleRecord[];
   expectedSampleDays: number;
   yearRange: { start: number; end: number };

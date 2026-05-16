@@ -79,15 +79,13 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 - **`lib/regions.ts`** — `prefecture → Region` 対応の純データ（6地域分類）。
 - **`lib/recent-places.ts`** — `localStorage` の薄いラッパー（`loadRecentPlaces` / `saveRecentPlace` / `clearRecentPlaces`）。SSR セーフ、quota エラーは `try/catch` で握りつぶす。
 - **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
-- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。**縦並びは重要度降順**（コメント → 要約カード → サンプル数バナー → 主役の降水量構成 → 気温分布 → 年次傾向 → 風速 → 折りたたみ詳細）。末尾の `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）は補助情報。新しいセクションを追加する際もこの優先順位を維持し、主役（降水量の構成）を中央より下に押し下げないこと。
-- **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 7種:
+- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。**縦並びは重要度降順**（コメント → 要約カード → サンプル数バナー → 主役の降水量構成 → 気温分布 → 風速 → 折りたたみ詳細）。末尾の `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）は補助情報。新しいセクションを追加する際もこの優先順位を維持し、主役（降水量の構成）を中央より下に押し下げないこと。
+- **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 5種:
   - `StatCards` (雨日割合・気温帯・風速帯の3カード要約。リスクピル付き)
   - `BarMeter` (横バー + 中/高リスク閾値ティック、現状未使用)
   - `RibbonBand` (P10–P90帯 + P25–P75 濃色 + P50中央線。**P10/P50/P90 の数値直書き**＋軸ティック5〜7個＋閾値タグ。現状は風速のみで使用)
   - `TempRibbonBand` (最高気温・最低気温の P10–P90 / P25–P75 / P50 を**同一温度軸の上下2段**で描画。橙=最高・青=最低、真夏日30℃/冷込5℃の閾値破線は両バンドを縦断、軸ティックは共有)
   - `StackedShareBar` (晴れ/小雨/雨/大雨の100%スタック。`totalDays`/`sampleN` で日数換算を表示。h-12 とヘッドライン「X% が雨」付き)
-  - `YearHeatmap` (30年分のセル。**全セルに雨日数を直接表示**＋最多年に黄枠＋数値レンジ凡例)
-  - `YearBars` (30年の雨日数を縦棒で時系列表示。中央値ライン、上位25%濃色、下位25%淡色、最多/最少年キャプション)
   - `SamplesTable` (集計の根拠となる全観測日（最大450件）の HTML テーブル。`max-h-96 overflow-auto` + sticky header、年降順→オフセット昇順、候補日行は amber 背景、雨/大雨セルは indigo 強調、欠損は「—」)
 - 配色は **heat=橙 / cold=青 / rain=indigo / wind=紫** で固定（赤緑コンフリクト回避）。総合スコアの帯背景のみ emerald/amber/rose（独立指標なので OK）。
 
@@ -111,7 +109,6 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **`lib/types.ts` の `Aggregated`** — 平均値（`avgTmax` 等）の他に **チャート用フィールド**を多数保持:
   - `tmaxDist / tminDist / windDist` — `Percentiles` (P10/P25/P50/P75/P90)
   - `rainShare` — `{none, light, moderate, heavy}` の比率（晴れ <1mm, 小雨 1-10mm, 雨 10-30mm, 大雨 ≥30mm）
-  - `byYear` — `YearOutcome[]`（30件、年次の雨日数・最大雨量・気温平均）
   - `samples` — `SampleRecord[]`（最大 15日 × 30年 ≒ 450件。集計の根拠となる生レコードを `null` 含めて保持。`SamplesTable` で表示）
   - `expectedSampleDays`、`yearRange`
   新しい集計を書く前に既存フィールドを確認すること。
