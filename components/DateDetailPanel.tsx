@@ -1,5 +1,6 @@
 import type { DiagnoseResult } from "@/lib/types";
 import { RibbonBand } from "./charts/RibbonBand";
+import { TempRibbonBand } from "./charts/TempRibbonBand";
 import { StackedShareBar } from "./charts/StackedShareBar";
 import { YearHeatmap } from "./charts/YearHeatmap";
 import { YearBars } from "./charts/YearBars";
@@ -13,20 +14,21 @@ function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
 }
 
-function tempDomain(p10: number, p90: number, threshold?: number): [number, number] {
-  const candidates = [p10, p90, threshold].filter(
-    (v): v is number => v !== undefined && Number.isFinite(v),
-  );
-  const lo = Math.floor(Math.min(...candidates) - 3);
-  const hi = Math.ceil(Math.max(...candidates) + 3);
-  return [lo, hi];
-}
-
 export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
   const { stats, scores, comment } = result;
 
-  const tmaxDomain = tempDomain(stats.tmaxDist.p10, stats.tmaxDist.p90, 30);
-  const tminDomain = tempDomain(stats.tminDist.p10, stats.tminDist.p90, 5);
+  const tempBounds = [
+    stats.tmaxDist.p10,
+    stats.tmaxDist.p90,
+    stats.tminDist.p10,
+    stats.tminDist.p90,
+    30,
+    5,
+  ];
+  const tempDomain: [number, number] = [
+    Math.floor(Math.min(...tempBounds) - 3),
+    Math.ceil(Math.max(...tempBounds) + 3),
+  ];
   const windHi = Math.max(8, Math.ceil(stats.windDist.p90 + 1));
 
   const missing = stats.expectedSampleDays - stats.n;
@@ -72,21 +74,14 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
             淡色＝典型範囲(P10–P90)／濃色＝中央50%(P25–P75)／縦線＝中央値(P50)
           </p>
         </div>
-        <RibbonBand
-          axis="tmax"
-          label="最高気温"
-          unit="℃"
-          percentiles={stats.tmaxDist}
-          domain={tmaxDomain}
-          thresholds={[{ value: 30, label: "真夏日 30℃", color: "#ea580c" }]}
-        />
-        <RibbonBand
-          axis="tmin"
-          label="最低気温"
-          unit="℃"
-          percentiles={stats.tminDist}
-          domain={tminDomain}
-          thresholds={[{ value: 5, label: "冷込 5℃", color: "#0284c7" }]}
+        <TempRibbonBand
+          tmax={stats.tmaxDist}
+          tmin={stats.tminDist}
+          domain={tempDomain}
+          thresholds={[
+            { value: 30, label: "真夏日 30℃", color: "#ea580c" },
+            { value: 5, label: "冷込 5℃", color: "#0284c7" },
+          ]}
         />
       </section>
 
