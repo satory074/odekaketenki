@@ -1,7 +1,8 @@
-// Dev seed: generates plausible (but synthetic) data for ALL 47 stations from
-// scripts/jma_stations.py so the UI works end-to-end before the Python JMA
-// ingest runs. Each station's climate is calibrated from latitude / longitude
-// so northern stations are colder and Okinawa is warm year-round.
+// Dev seed: generates plausible (but synthetic) data for every station listed
+// in public/data/stations.json (currently 159 s1 sites) so the UI works
+// end-to-end before the Python JMA ingest runs. Each station's climate is
+// calibrated from latitude / longitude so northern stations are colder and
+// Okinawa is warm year-round.
 //
 // Real data is produced by:
 //   cd scripts && uv run python -m fetch_jma --all --years 30

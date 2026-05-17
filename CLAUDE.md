@@ -65,6 +65,31 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 
 **完全クライアント側**：API ルートは存在しない（GitHub Pages 静的ホスティング向け）。Open-Meteo Geocoding はブラウザから CORS で直叩き。観測点データは `public/data/` から `fetch()`、ブラウザ内 `Map` でプロセス内キャッシュ。
 
+### 主要ファイル索引
+
+| ファイル | 役割 |
+| --- | --- |
+| `app/page.tsx` | エントリ。`CandidateForm` を読み込むだけ |
+| `components/CandidateForm.tsx` | 検索/地点選択/カレンダー/詳細パネルのオーケストレータ (`use client`) |
+| `components/Calendar.tsx` | 月次カレンダー (`use client`) |
+| `components/StationPicker.tsx` | 地域タブ式の地点ピッカー |
+| `components/DateDetailPanel.tsx` | 単一日の詳細パネル（静的レンダリング可能） |
+| `components/charts/*` | 純 SVG プリミティブ（4種、依存ゼロ） |
+| `lib/diagnose.ts` | 検索→地点準備→単日診断のクライアント側 API |
+| `lib/aggregate.ts` | ±7日 × 30年の集計（純粋関数、I/Oなし） |
+| `lib/scoring.ts` | 4軸リスク→`ScoreReport` への変換と総合スコア |
+| `lib/comments.ts` | ルールベース日本語コメント生成 (`pickPrimary`) |
+| `lib/stations.ts` / `lib/jma-data.ts` | `public/data/*` を fetch + module-level Map キャッシュ |
+| `lib/recent-places.ts` | 最近選んだ場所の localStorage ラッパー |
+| `lib/regions.ts` | `prefecture → Region`（6分類）の純データ |
+| `lib/asset-path.ts` | `NEXT_PUBLIC_BASE_PATH` 前置ヘルパー |
+| `lib/types.ts` | 共有型 (`Aggregated` / `ScoreReport` / `StationData` …) |
+| `scripts/fetch_jma.py` | obsdl HTML 月次表のスクレイピング (uv) |
+| `scripts/build_dataset.py` | `.cache/` → `public/data/jma/*.json` 変換 + `stations.json` 生成 |
+| `scripts/discover_stations.py` | JMA select ページ巡回→地点レジストリ再構築 |
+| `scripts/jma_stations.py` | `STATIONS` 159地点レジストリ（自動発見ブロック含む） |
+| `scripts/seed_dev_data.mjs` | 緯度ベース合成データ生成（実データ未取得地点のフォールバック） |
+
 ## デプロイ
 
 - 本番URL: **https://satory074.github.io/odekaketenki/**
@@ -80,9 +105,8 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 - **`lib/recent-places.ts`** — `localStorage` の薄いラッパー（`loadRecentPlaces` / `saveRecentPlace` / `clearRecentPlaces`）。SSR セーフ、quota エラーは `try/catch` で握りつぶす。
 - **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
 - **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。**縦並びは重要度降順**（コメント → 要約カード → サンプル数バナー → 主役の降水量構成 → 気温分布 → 風速 → 折りたたみ詳細）。末尾の `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）は補助情報。新しいセクションを追加する際もこの優先順位を維持し、主役（降水量の構成）を中央より下に押し下げないこと。
-- **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 5種:
+- **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 4種:
   - `StatCards` (雨日割合・気温帯・風速帯の3カード要約。リスクピル付き)
-  - `BarMeter` (横バー + 中/高リスク閾値ティック、現状未使用)
   - `RibbonBand` (P10–P90帯 + P25–P75 濃色 + P50中央線。**P10/P50/P90 の数値直書き**＋軸ティック5〜7個＋閾値タグ。現状は風速のみで使用)
   - `TempRibbonBand` (最高気温・最低気温の P10–P90 / P25–P75 / P50 を**同一温度軸の上下2段**で描画。橙=最高・青=最低、真夏日30℃/冷込5℃の閾値破線は両バンドを縦断、軸ティックは共有)
   - `StackedShareBar` (晴れ/小雨/雨/大雨の100%スタック。`totalDays`/`sampleN` で日数換算を表示。h-12 とヘッドライン「X% が雨」付き)
@@ -115,12 +139,12 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **`lib/scoring.ts`** — 各リスクの閾値（rain≥0.45, hot≥0.6 等）と重み（heat 0.9, cold 0.7, wind 0.5）はここに集約。総合スコアは「100 - ペナルティ合計」で 0–100 にクランプ。
 - **`lib/comments.ts`** — `pickPrimary` で最もリスクの高い1要素を主軸に文を組み立てる。優先順は heat > cold > rain > wind（同レベル時）。湿度70%以上 + 暑さ高リスク時は別文を追加。
 - **`lib/jma-data.ts` / `lib/stations.ts`** — `fetch()` ベースでブラウザから取得。モジュール内 `Map` でセッション内キャッシュ。`public/data/jma/*.json` を更新した場合はブラウザのリロードで反映。
-- **`lib/diagnose.ts`** — クライアント側 API。`searchPlaces()` は Open-Meteo を直接叩く。`prepareLocation()` は場所決定時に観測点検索 + データ取得を1回だけ実行（I/Oあり、async）。`diagnoseDate()` はその後の日付クリックごとに集計 + スコアリング + コメント生成を同期で行う（純粋関数、I/Oなし）。`diagnose()` も互換のため残してあるが現状未使用。
+- **`lib/diagnose.ts`** — クライアント側 API。`searchPlaces()` は Open-Meteo を直接叩く。`prepareLocation()` は場所決定時に観測点検索 + データ取得を1回だけ実行（I/Oあり、async）。`diagnoseDate()` はその後の日付クリックごとに集計 + スコアリング + コメント生成を同期で行う（純粋関数、I/Oなし）。
 - **`lib/asset-path.ts`** — `NEXT_PUBLIC_BASE_PATH` を読んで `/data/...` 等の fetch URL に basePath を前置。GitHub Pages のサブパス対応用。
 - **チャートの動的色 / 一部の grid 系クラスは inline `style` で当てる** — `BarMeter` / `StackedShareBar` 等で軸別の色を切り替える際、Tailwind クラス文字列を `${var}-500` のように動的構築すると **Tailwind v3 JIT が検出できず未生成**になる（Turbopack 環境では safelist も効きが不安定だった）。SVG の `<rect>` 等も `className="fill-orange-100"` ではなく `fill={hex}` 属性を使う。**さらに、新規ファイルで初めて使う `grid-cols-N`（例: `grid-cols-7`）も同様に未生成になることがある**ので、その場合は `style={{ gridTemplateColumns: "repeat(N, minmax(0, 1fr))" }}` を使う（`Calendar.tsx` で実例）。固定の Tailwind クラス（テキスト・レイアウト・border 等）は普通に書いて OK。
 - **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でパース。`_build_field_map()` がヘッダー行の rowspan/colspan を展開して動的に column→field マッピングを構築するため、s1 (synoptic, 4ヘッダー行 21+列) と a1 (AMeDAS, 3ヘッダー行 4-18列) の両方を共通ロジックで処理。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。`StationRef.kind` で `daily_s1.php` / `daily_a1.php` を切替。
 - **`scripts/discover_stations.py`** — JMA 都府県別 select ページ（`prefecture.php?prec_no=<n>`）から `viewPoint('<kind>','<block_no>','<name>','<kana>',<lat_d>,<lat_m>,<lng_d>,<lng_m>,...)` JS呼び出しを正規表現抽出 → `pykakasi` で漢字→ローマ字（passport式: 東京→tokyo）スラグ生成 → `discover_output.py` に Python リテラルで吐き出して `jma_stations.STATIONS` にマージ。北海道（11–24）は14のサブ地域 prec_no を `北海道` に統合。重複スラグは `<slug>-<prec_no>-<block_no>` で disambiguate。再実行は `.cache/discover/` のキャッシュで爆速。
-- **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで `public/data/stations.json` にある全地点（現状159）の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる（**現状は s1 159地点とも実データに差し替え済み**）。スクリプト先頭コメントは 47地点時代のままだが、実挙動は stations.json の件数に追従。
+- **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで `public/data/stations.json` にある全地点（現状159）の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる（**現状は s1 159地点とも実データに差し替え済み**）。
 
 ## TypeScript / Lint 規約
 
@@ -170,6 +194,8 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **コードは自動編集しない**。採否は人間判断（`discover_output.py` の取り込み → `jma_stations.py` 編集）
 
 ### 手動更新（緊急時 / Actions 障害時）
+`refresh-local.sh` は `fetch_jma` → `build_dataset` を直近3ヶ月再フェッチ込みでまとめたショートカット（「主要コマンド」の個別呼び出しと同等）。
+
 ```bash
 cd scripts && bash refresh-local.sh
 # 完了後:
