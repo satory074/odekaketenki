@@ -39,6 +39,22 @@ function buildTicks(min: number, max: number): number[] {
 
 type SeriesKey = "tmax" | "tmin";
 
+function SeriesSwatch({ color }: { color: string }) {
+  return (
+    <svg width="10" height="10" aria-hidden className="inline-block shrink-0">
+      <rect width="10" height="10" rx="2" fill={color} />
+    </svg>
+  );
+}
+
+function DashSwatch({ color }: { color: string }) {
+  return (
+    <svg width="14" height="6" aria-hidden className="inline-block shrink-0">
+      <line x1="0" y1="3" x2="14" y2="3" stroke={color} strokeWidth="1.4" strokeDasharray="3 2" />
+    </svg>
+  );
+}
+
 function Band({
   series,
   percentiles,
@@ -80,37 +96,6 @@ function Band({
         strokeWidth="0.7"
         stroke={colors.median}
       />
-      <text
-        x={x(percentiles.p10)}
-        y={bandTop - 1.6}
-        textAnchor="start"
-        fontSize="3.4"
-        fill={colors.tickText}
-        fontFamily="ui-monospace, monospace"
-      >
-        {percentiles.p10.toFixed(1)}
-      </text>
-      <text
-        x={x(percentiles.p50)}
-        y={bandTop - 1.6}
-        textAnchor="middle"
-        fontSize="3.6"
-        fontWeight="700"
-        fill={colors.median}
-        fontFamily="ui-monospace, monospace"
-      >
-        {percentiles.p50.toFixed(1)}
-      </text>
-      <text
-        x={x(percentiles.p90)}
-        y={bandTop - 1.6}
-        textAnchor="end"
-        fontSize="3.4"
-        fill={colors.tickText}
-        fontFamily="ui-monospace, monospace"
-      >
-        {percentiles.p90.toFixed(1)}
-      </text>
     </g>
   );
 }
@@ -121,34 +106,53 @@ export function TempRibbonBand({ tmax, tmin, domain, thresholds }: Props) {
   const x = (v: number) => ((v - min) / range) * 100;
 
   const W = 100;
-  const H = 56;
+  const H = 44;
   const ticks = buildTicks(min, max);
 
-  const tmaxTop = 10;
-  const tminTop = 28;
+  const tmaxTop = 4;
+  const tminTop = 20;
   const bandHeight = 12;
   const axisLineY = tminTop + bandHeight + 2;
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       <div className="flex items-baseline justify-between text-xs">
-        <span className="font-medium" style={{ color: SERIES_COLOR.tmax.median }}>
+        <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: SERIES_COLOR.tmax.median }}>
+          <SeriesSwatch color={SERIES_COLOR.tmax.p25p75} />
           最高
         </span>
         <span className="font-mono tabular-nums text-stone-500">
           {tmax.p10.toFixed(1)}〜{tmax.p90.toFixed(1)} ℃
-          <span className="ml-1 text-stone-400">(中央 {tmax.p50.toFixed(1)})</span>
+          <span className="ml-2 text-stone-600">
+            中央 <span className="font-semibold">{tmax.p50.toFixed(1)}</span>
+          </span>
         </span>
       </div>
       <div className="flex items-baseline justify-between text-xs">
-        <span className="font-medium" style={{ color: SERIES_COLOR.tmin.median }}>
+        <span className="inline-flex items-center gap-1.5 font-medium" style={{ color: SERIES_COLOR.tmin.median }}>
+          <SeriesSwatch color={SERIES_COLOR.tmin.p25p75} />
           最低
         </span>
         <span className="font-mono tabular-nums text-stone-500">
           {tmin.p10.toFixed(1)}〜{tmin.p90.toFixed(1)} ℃
-          <span className="ml-1 text-stone-400">(中央 {tmin.p50.toFixed(1)})</span>
+          <span className="ml-2 text-stone-600">
+            中央 <span className="font-semibold">{tmin.p50.toFixed(1)}</span>
+          </span>
         </span>
       </div>
+      {thresholds && thresholds.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] pt-0.5">
+          {thresholds.map((t) => {
+            const c = t.color ?? "#78716c";
+            return (
+              <span key={t.label} className="inline-flex items-center gap-1.5" style={{ color: c }}>
+                <DashSwatch color={c} />
+                <span className="font-medium">{t.label}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
         {/* baseline */}
         <line x1="0" x2={W} y1={axisLineY} y2={axisLineY} stroke="#e7e5e4" strokeWidth="0.4" />
@@ -175,34 +179,22 @@ export function TempRibbonBand({ tmax, tmin, domain, thresholds }: Props) {
             </text>
           </g>
         ))}
-        {/* thresholds spanning both bands */}
+        {/* thresholds spanning both bands (labels are rendered in the legend row above) */}
         {thresholds?.map((t) => {
           if (t.value < min || t.value > max) return null;
           const tx = x(t.value);
           const tagColor = t.color ?? "#78716c";
           return (
-            <g key={t.label}>
-              <line
-                x1={tx}
-                x2={tx}
-                y1={tmaxTop - 4}
-                y2={axisLineY}
-                strokeDasharray="0.8 0.8"
-                strokeWidth="0.4"
-                stroke={tagColor}
-              />
-              <text
-                x={tx}
-                y={tmaxTop - 4.6}
-                textAnchor="middle"
-                fontSize="3"
-                fill={tagColor}
-                fontFamily="ui-sans-serif, system-ui"
-                fontWeight="600"
-              >
-                {t.label}
-              </text>
-            </g>
+            <line
+              key={t.label}
+              x1={tx}
+              x2={tx}
+              y1={tmaxTop - 1}
+              y2={axisLineY}
+              strokeDasharray="0.8 0.8"
+              strokeWidth="0.4"
+              stroke={tagColor}
+            />
           );
         })}
         {/* tmax band (top) */}
