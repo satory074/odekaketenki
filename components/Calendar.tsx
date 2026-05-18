@@ -1,6 +1,7 @@
 "use client";
 
 import type { DayBrief } from "@/lib/diagnose";
+import { getRokuyou, rokuyouLabel, type Rokuyou } from "@/lib/rokuyou";
 import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 
 type Props = {
@@ -37,6 +38,13 @@ function scoreColor(score: number): string {
 const RAIN_COLOR = "#6366f1"; // indigo-500
 
 const WEEKDAY_LABEL = ["日", "月", "火", "水", "木", "金", "土"];
+
+function rokuyouTextColor(r: Rokuyou, isSelected: boolean): string {
+  if (isSelected) return "text-white/80";
+  if (r === "taian") return "text-rose-500 font-semibold";
+  if (r === "butsumetsu") return "text-slate-400";
+  return "text-slate-500";
+}
 
 export function Calendar({
   selectedDate,
@@ -144,13 +152,16 @@ export function Calendar({
                 ? "text-sky-600"
                 : "text-slate-800";
 
+          const rokuyou = !cell.outside ? getRokuyou(cell.date) : null;
+
           const ariaLabel = (() => {
             const [yy, mm, dd] = cell.date.split("-");
-            const base = `${yy}年${Number(mm)}月${Number(dd)}日 ${dowName}曜`;
+            let s = `${yy}年${Number(mm)}月${Number(dd)}日 ${dowName}曜`;
+            if (rokuyou) s += `、六曜${rokuyouLabel(rokuyou)}`;
             if (brief) {
-              return `${base}、総合スコア${brief.score}、雨日割合${Math.round(brief.rainProb * 100)}%`;
+              s += `、総合スコア${brief.score}、雨日割合${Math.round(brief.rainProb * 100)}%`;
             }
-            return base;
+            return s;
           })();
 
           return (
@@ -182,6 +193,15 @@ export function Calendar({
               <span className={isSelected ? "font-semibold" : "font-medium"}>
                 {cell.day}
               </span>
+
+              {/* Rokuyou (六曜) label */}
+              {rokuyou && (
+                <span
+                  className={`mt-0.5 text-[10px] leading-none ${rokuyouTextColor(rokuyou, isSelected)}`}
+                >
+                  {rokuyouLabel(rokuyou)}
+                </span>
+              )}
 
               {/* Bottom rain probability mini bar */}
               {brief && (
@@ -234,6 +254,12 @@ export function Calendar({
             style={{ backgroundColor: RAIN_COLOR }}
           />
           <span>下端バー = 雨日割合</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-rose-500 font-semibold">大安</span>
+          <span>/</span>
+          <span className="text-slate-400">仏滅</span>
+          <span>= 六曜</span>
         </div>
       </div>
     </div>

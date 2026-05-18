@@ -44,7 +44,12 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
         │
         ▼
 [Next.js App Router (静的エクスポート)]
-   └─ app/page.tsx → CandidateForm (use client) → Calendar / DateDetailPanel
+   └─ app/page.tsx
+        └─ CandidateForm (use client) — 全状態のオーナー
+             └─ AppShell
+                  ├─ AppHeader (sticky)  ← SearchCombobox / 現在地 / 観測地点ボタンを slot 経由で
+                  └─ <main>: Calendar + (デスクトップ) DateDetailPanel
+                       + Sheet で StationPicker / (モバイル) DateDetailPanel
         │
         ▼
 [lib/diagnose.ts]  ※ ブラウザで完結
@@ -75,7 +80,7 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 | `components/CandidateForm.tsx` | 全状態の保持と AppShell へのプロップ供給 (`use client`) |
 | `components/SearchCombobox.tsx` | 場所検索コンボボックス。AppHeader の `searchSlot` として注入 |
 | `components/Sheet.tsx` | bottom-sheet/modal 兼用。StationPicker と詳細パネル（モバイル）に使用 |
-| `components/Calendar.tsx` | 月次カレンダー。総合スコア色帯と雨日割合ミニバーをセルに重ねる (`use client`) |
+| `components/Calendar.tsx` | 月次カレンダー。総合スコア色帯・雨日割合ミニバー・六曜ラベルをセルに重ねる (`use client`) |
 | `components/StationPicker.tsx` | 地域タブ式の地点ピッカー。Sheet 内で表示 |
 | `components/DateDetailPanel.tsx` | 単一日の詳細パネル。先頭に HeroBlock |
 | `components/HeroBlock.tsx` | 日付・総合スコア（5xl）・コメント。emerald/amber/rose のグラデ背景 |
@@ -158,7 +163,7 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **`lib/jma-data.ts` / `lib/stations.ts`** — `fetch()` ベースでブラウザから取得。モジュール内 `Map` でセッション内キャッシュ。`public/data/jma/*.json` を更新した場合はブラウザのリロードで反映。
 - **`lib/diagnose.ts`** — クライアント側 API。`searchPlaces()` は Open-Meteo を直接叩く。`prepareLocation()` は場所決定時に観測点検索 + データ取得を1回だけ実行（I/Oあり、async）。`diagnoseDate()` はその後の日付クリックごとに集計 + スコアリング + コメント生成を同期で行う（純粋関数、I/Oなし）。
 - **`lib/asset-path.ts`** — `NEXT_PUBLIC_BASE_PATH` を読んで `/data/...` 等の fetch URL に basePath を前置。GitHub Pages のサブパス対応用。
-- **チャートの動的色 / 一部の grid 系クラスは inline `style` で当てる** — `BarMeter` / `StackedShareBar` 等で軸別の色を切り替える際、Tailwind クラス文字列を `${var}-500` のように動的構築すると **Tailwind v3 JIT が検出できず未生成**になる（Turbopack 環境では safelist も効きが不安定だった）。SVG の `<rect>` 等も `className="fill-orange-100"` ではなく `fill={hex}` 属性を使う。**さらに、新規ファイルで初めて使う `grid-cols-N`（例: `grid-cols-7`）も同様に未生成になることがある**ので、その場合は `style={{ gridTemplateColumns: "repeat(N, minmax(0, 1fr))" }}` を使う（`Calendar.tsx` で実例）。固定の Tailwind クラス（テキスト・レイアウト・border 等）は普通に書いて OK。
+- **チャートの動的色 / 一部の grid 系クラスは inline `style` で当てる** — `StackedShareBar` / `StatCards` / `Calendar` のセル色帯・ミニバー等で軸別の色を切り替える際、Tailwind クラス文字列を `${var}-500` のように動的構築すると **Tailwind v3 JIT が検出できず未生成**になる（Turbopack 環境では safelist も効きが不安定）。SVG の `<rect>` 等も `className="fill-orange-100"` ではなく `fill={hex}` 属性を使う。**さらに、新規ファイルで初めて使う `grid-cols-N`（例: `grid-cols-7`）も同様に未生成になることがある**ので、その場合は `style={{ gridTemplateColumns: "repeat(N, minmax(0, 1fr))" }}` を使う（`Calendar.tsx` / `StationPicker.tsx` で実例）。固定の Tailwind クラス（テキスト・レイアウト・border 等）は普通に書いて OK。なお `tailwind.config.js` の `safelist` で `(bg|text|ring|border|fill|stroke|from|to)-(orange|sky|blue|indigo|violet|amber|emerald|rose|stone|slate)-(50..900)` を一括許可しており、データ駆動の固定パレットは概ね生成される。
 - **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でパース。`_build_field_map()` がヘッダー行の rowspan/colspan を展開して動的に column→field マッピングを構築するため、s1 (synoptic, 4ヘッダー行 21+列) と a1 (AMeDAS, 3ヘッダー行 4-18列) の両方を共通ロジックで処理。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。`StationRef.kind` で `daily_s1.php` / `daily_a1.php` を切替。
 - **`scripts/discover_stations.py`** — JMA 都府県別 select ページ（`prefecture.php?prec_no=<n>`）から `viewPoint('<kind>','<block_no>','<name>','<kana>',<lat_d>,<lat_m>,<lng_d>,<lng_m>,...)` JS呼び出しを正規表現抽出 → `pykakasi` で漢字→ローマ字（passport式: 東京→tokyo）スラグ生成 → `discover_output.py` に Python リテラルで吐き出して `jma_stations.STATIONS` にマージ。北海道（11–24）は14のサブ地域 prec_no を `北海道` に統合。重複スラグは `<slug>-<prec_no>-<block_no>` で disambiguate。再実行は `.cache/discover/` のキャッシュで爆速。
 - **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで `public/data/stations.json` にある全地点（現状159）の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる（**現状は s1 159地点とも実データに差し替え済み**）。
@@ -168,7 +173,7 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **strict mode** 有効。`any` は error。
 - パスエイリアス: `@/*` → リポジトリルート。
 - Next.js flat ESLint config。`react-hooks/set-state-in-effect` がデフォルト error なので、useEffect の中で同期 setState を呼ばないこと（debounce timer の中で呼ぶ等）。
-- **静的エクスポート前提**: `app/api/` は使わない。Server Component から `fs` を読むのも避け（`output: "export"` 時にエラー）、`lib/*` は全て fetch ベースのブラウザ実行可能コードにする。`use client` は `CandidateForm` と `Calendar` のみ、それ以外（`DateDetailPanel`、`charts/*`）は静的レンダリング可能なまま保つ。
+- **静的エクスポート前提**: `app/api/` は使わない。Server Component から `fs` を読むのも避け（`output: "export"` 時にエラー）、`lib/*` は全て fetch ベースのブラウザ実行可能コードにする。`use client` はインタラクション・状態管理が必要なもののみ（`CandidateForm` / `Calendar` / `Sheet` / `SearchCombobox` / `StationPicker`）。`DateDetailPanel` / `HeroBlock` / `AppShell` / `AppHeader` / `charts/*` / `icons` は静的レンダリング可能なまま保つ。
 
 ## テストスイート
 
