@@ -70,12 +70,18 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 | ファイル | 役割 |
 | --- | --- |
 | `app/page.tsx` | エントリ。`CandidateForm` を読み込むだけ |
-| `components/CandidateForm.tsx` | 検索/地点選択/カレンダー/詳細パネルのオーケストレータ (`use client`) |
-| `components/Calendar.tsx` | 月次カレンダー (`use client`) |
-| `components/StationPicker.tsx` | 地域タブ式の地点ピッカー |
-| `components/DateDetailPanel.tsx` | 単一日の詳細パネル（静的レンダリング可能） |
+| `components/AppShell.tsx` | スティッキーヘッダー + メイン + フッターの全体シェル |
+| `components/AppHeader.tsx` | sticky 上部ヘッダー。`searchSlot` / `placeBadge` / `actions` を受け取る |
+| `components/CandidateForm.tsx` | 全状態の保持と AppShell へのプロップ供給 (`use client`) |
+| `components/SearchCombobox.tsx` | 場所検索コンボボックス。AppHeader の `searchSlot` として注入 |
+| `components/Sheet.tsx` | bottom-sheet/modal 兼用。StationPicker と詳細パネル（モバイル）に使用 |
+| `components/Calendar.tsx` | 月次カレンダー。総合スコア色帯と雨日割合ミニバーをセルに重ねる (`use client`) |
+| `components/StationPicker.tsx` | 地域タブ式の地点ピッカー。Sheet 内で表示 |
+| `components/DateDetailPanel.tsx` | 単一日の詳細パネル。先頭に HeroBlock |
+| `components/HeroBlock.tsx` | 日付・総合スコア（5xl）・コメント。emerald/amber/rose のグラデ背景 |
+| `components/icons.tsx` | SVG アイコン群（依存ゼロ） |
 | `components/charts/*` | 純 SVG プリミティブ（4種、依存ゼロ） |
-| `lib/diagnose.ts` | 検索→地点準備→単日診断のクライアント側 API |
+| `lib/diagnose.ts` | 検索→地点準備→単日診断 (`diagnoseDate`) + 月内全日付一括集計 (`diagnoseMonth`) のクライアント側 API |
 | `lib/aggregate.ts` | ±7日 × 30年の集計（純粋関数、I/Oなし） |
 | `lib/scoring.ts` | 4軸リスク→`ScoreReport` への変換と総合スコア |
 | `lib/comments.ts` | ルールベース日本語コメント生成 (`pickPrimary`) |
@@ -99,19 +105,30 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 
 ## 可視化レイヤ
 
-- **`components/CandidateForm.tsx`** — 場所検索・観測点先読み・カレンダー・詳細パネルのオーケストレータ。地点選択は ①検索コンボボックス（ARIA `role="combobox"` / `aria-activedescendant` / ↑↓ Enter Esc 対応・マッチ部分太字・`No results` メッセージ）②`📍 現在地` ボタン（`navigator.geolocation` 経由、許可拒否/タイムアウトのインラインエラー）③`StationPicker`（s1 全 159地点を地域別に直接） の3経路を提供。場所決定で `prepareLocation()` または `prepareLocationFromStation()` を `useEffect` で1度だけ呼び `LocationContext` として保持、`Calendar` の `onSelect` から `diagnoseDate()` を同期で叩いて単一日の詳細を表示。最近選んだ場所は `lib/recent-places.ts` 経由で localStorage に最大5件保存、検索ボックスフォーカス時にドロップダウン頭に表示。
-- **`components/StationPicker.tsx`** — 159地点を地域タブ（北海道・東北 / 関東 / 中部 / 近畿 / 中国・四国 / 九州・沖縄）でブラウズできる折りたたみピッカー。`<details>` ベース・依存ゼロ。タブとボタンは `role="tab"` / `aria-selected` 付き、地点ボタンは `aria-label="<station>（<prefecture>）"`。地点ボタンのグリッドは `style={{ gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))" }}` を inline で指定（Tailwind の `grid-cols-N` 動的生成回避ルール準拠）。
+### 全体レイアウト
+- **`components/AppShell.tsx` + `components/AppHeader.tsx`** — ページ全体のシェル。`AppHeader` は `position: sticky; top: 0; z-30` のスティッキーヘッダーで、`backdrop-blur` 付き半透明背景 (`bg-white/90`)。`searchSlot` / `placeBadge` / `actions` の3つの slot を受ける（`CandidateForm` から `SearchCombobox` / 現在地ボタン / 観測地点ボタンを注入）。h1（アプリ名）は header 内に1つだけ存在。`AppShell` が `<main id="main-content">` と `<footer>` も提供し、最大幅は `max-w-screen-2xl`、レスポンシブパディング `px-4 sm:px-6 lg:px-8`。
+- **`components/CandidateForm.tsx`** — 全状態のオーナー (`use client`)。`useMatchMedia` 相当のロジックで `isDesktop`（≥ 1024px）を判定し、デスクトップは2カラム（左カレンダー / 右詳細パネル、`lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)]`）、モバイルはカレンダー1列 + 日付選択で `Sheet` (bottom-sheet) が下から開く。
+- **`components/Sheet.tsx`** — bottom-sheet/modal 兼用。`role="dialog" aria-modal="true"`、Esc で閉じる、背景クリックで閉じる、`body.style.overflow="hidden"` でページスクロール抑制、開閉時にフォーカスを管理。アニメーションは `globals.css` の `@keyframes odk-slide-up` / `odk-fade-in`、`prefers-reduced-motion` で自動短縮。
+
+### 場所選択
+- **`components/SearchCombobox.tsx`** — ARIA `combobox` 仕様準拠（`role="combobox"` / `aria-controls` / `aria-activedescendant` / ↑↓ Enter Esc 対応・マッチ部分太字・no-results メッセージ）。内部に query 状態、最近選んだ場所、debounce 検索、click-outside クローズ、`displayValue` プロップで外部選択（StationPicker / 現在地）と同期。Adjusting state during render パターンで外部変更時に内部 query を自動リセット（`useEffect` 同期 setState の lint 違反を回避）。
+- **`components/StationPicker.tsx`** — 159地点を地域タブ（北海道・東北 / 関東 / 中部 / 近畿 / 中国・四国 / 九州・沖縄）でブラウズ。`Sheet` の中で表示されるため、`<details>` 折りたたみは廃止。地点ボタンのグリッドは `style={{ gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))" }}` を inline で指定（Tailwind の `grid-cols-N` 動的生成回避ルール準拠）。
 - **`lib/regions.ts`** — `prefecture → Region` 対応の純データ（6地域分類）。
 - **`lib/recent-places.ts`** — `localStorage` の薄いラッパー（`loadRecentPlaces` / `saveRecentPlace` / `clearRecentPlaces`）。SSR セーフ、quota エラーは `try/catch` で握りつぶす。
-- **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー（外部ライブラリなし）。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる（Turbopack + Tailwind v3 で `grid-cols-7` が未生成になるため）。今日にリング、選択日に sky 塗り、日曜=赤系・土曜=青系。月送り `‹` `›`。
-- **`components/DateDetailPanel.tsx`** — カレンダー直下に表示される詳細パネル。**縦並びは重要度降順**（コメント → 要約カード → サンプル数バナー → 主役の降水量構成 → 気温分布 → 風速 → 折りたたみ詳細）。末尾の `<details>` 2つ（平均値テーブル ／ 全観測データ一覧 `SamplesTable`）は補助情報。新しいセクションを追加する際もこの優先順位を維持し、主役（降水量の構成）を中央より下に押し下げないこと。
+
+### カレンダーと詳細
+- **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー。`viewYear` / `viewMonth` / `onChangeView` を親から受ける純粋プレゼンテーション。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる。各セルに `monthData?.get(date)` から取り出した `{score, rainProb}` を**左色帯（emerald ≥75 / amber 50-74 / rose <50）と下端ミニ雨日バー（indigo, 雨日割合 × 100%）**として重ねる（CLAUDE.md 動的色は inline `style={{ backgroundColor }}` を使うルール準拠）。tap target 確保のため `min-h-12 sm:min-h-14`、月送り `‹` `›` は `h-10 w-10` の丸ボタン（`ChevronLeftIcon` / `ChevronRightIcon`）。`focus-visible:ring-2 focus-visible:ring-sky-500` を全インタラクティブ要素に統一。
+- **`components/HeroBlock.tsx`** — `DateDetailPanel` の先頭ブロック。日付の日本語フォーマット（曜日付き）+ 総合スコア **`text-5xl sm:text-6xl font-bold tabular-nums`** + tier ラベル（emerald「比較的良好」/ amber「やや注意」/ rose「要注意」）+ コメント本文。背景は `bg-gradient-to-br` で tier 色（emerald-50 → emerald-100 等）。
+- **`components/DateDetailPanel.tsx`** — 詳細パネル。**縦並びは重要度降順**（ヒーロー → 集計根拠 → 要約カード → 主役の降水量構成 → 気温分布 → 風速 → 折りたたみ詳細2つ）。主役の section は `border-2 border-indigo-200` + 左に `w-1 bg-indigo-500` の縦帯 + 「主役」バッジで意図的に強調。新しいセクションを追加する際もこの優先順位を維持し、主役（降水量の構成）を中央より下に押し下げないこと。
 - **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 4種:
   - `StatCards` (雨日割合・気温帯・風速帯の3カード要約。リスクピル付き)
   - `RibbonBand` (P10–P90帯 + P25–P75 濃色 + P50中央線。**P10/P50/P90 の数値直書き**＋軸ティック5〜7個＋閾値タグ。現状は風速のみで使用)
   - `TempRibbonBand` (最高気温・最低気温の P10–P90 / P25–P75 / P50 を**同一温度軸の上下2段**で描画。橙=最高・青=最低、真夏日30℃/冷込5℃の閾値破線は両バンドを縦断、軸ティックは共有)
   - `StackedShareBar` (晴れ/小雨/雨/大雨の100%スタック。`totalDays`/`sampleN` で日数換算を表示。h-12 とヘッドライン「X% が雨」付き)
   - `SamplesTable` (集計の根拠となる全観測日（最大450件）の HTML テーブル。`max-h-96 overflow-auto` + sticky header、年降順→オフセット昇順、候補日行は amber 背景、雨/大雨セルは indigo 強調、欠損は「—」)
-- 配色は **heat=橙 / cold=青 / rain=indigo / wind=紫** で固定（赤緑コンフリクト回避）。総合スコアの帯背景のみ emerald/amber/rose（独立指標なので OK）。
+- 配色は **heat=橙 / cold=青(`blue`) / rain=indigo / wind=violet/purple** で固定（赤緑コンフリクト回避）。**UI制御色は `sky`**（フォーカスリング・選択ハイライト・アクセントボタン）で、データの寒さ色（`blue`）と意図的に分離。総合スコアの帯背景のみ emerald/amber/rose（独立指標なので OK）。
+- フォーカスリングは全インタラクティブ要素で `focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2` に統一（`globals.css` でグローバルにも `outline: 2px solid #0284c7` を予防的に適用）。`prefers-reduced-motion: reduce` 時は `globals.css` の `@media` で全アニメ・トランジションを 0.001ms に短縮。
+- タイポグラフィの段階: ヒーロー数値 `text-5xl/6xl font-bold tabular-nums tracking-tight` → 見出し `text-base/lg font-semibold` → 小見出し `text-xs font-semibold uppercase tracking-wider text-slate-500` → 本文 `text-sm leading-relaxed text-slate-700` → 補足 `text-xs text-slate-500`。`text-[10px]` / `text-[11px]` の混在は廃止（`text-xs` で統一）。
 
 ## 重要な設計判断
 

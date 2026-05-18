@@ -83,6 +83,37 @@ export function diagnoseDate(args: {
   return { date: args.date, stats, scores: sc, comment };
 }
 
+export type DayBrief = {
+  score: number;
+  rainProb: number;
+  n: number;
+};
+
+/**
+ * Compute a per-day summary for every date in the given month.
+ * Used by the calendar to overlay total score and rain probability per cell.
+ * Pure function; no I/O.
+ */
+export function diagnoseMonth(args: {
+  stationData: StationData;
+  /** 4-digit year */
+  year: number;
+  /** 0-indexed month (matches Date.prototype.getMonth) */
+  month: number;
+}): Map<string, DayBrief> {
+  const result = new Map<string, DayBrief>();
+  const daysInMonth = new Date(args.year, args.month + 1, 0).getDate();
+  const mm = String(args.month + 1).padStart(2, "0");
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = `${args.year}-${mm}-${String(day).padStart(2, "0")}`;
+    const stats = aggregateAroundDate(args.stationData, iso);
+    if (stats.n === 0) continue;
+    const sc = score(stats);
+    result.set(iso, { score: sc.total, rainProb: stats.rainProb, n: stats.n });
+  }
+  return result;
+}
+
 export async function searchPlaces(query: string): Promise<
   {
     name: string;

@@ -7,7 +7,7 @@ const config = {
   safelist: [
     {
       pattern:
-        /^(bg|text|ring|border|fill|stroke)-(orange|sky|indigo|violet|amber|emerald|rose|stone)-(50|100|200|300|400|500|600|700|800)$/,
+        /^(bg|text|ring|border|fill|stroke|from|to)-(orange|sky|blue|indigo|violet|amber|emerald|rose|stone|slate)-(50|100|200|300|400|500|600|700|800|900)$/,
     },
     "bg-emerald-50",
     "bg-amber-50",
