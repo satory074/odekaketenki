@@ -117,14 +117,16 @@ export function TempRibbonBand({ tmax, tmin, domain, thresholds }: Props) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium" style={{ color: SERIES_COLOR.tmax.median }}>
-          <SeriesSwatch color={SERIES_COLOR.tmax.p25p75} />
-          最高
-        </span>
-        <span className="flex items-baseline gap-2 font-mono tabular-nums">
-          <span className="text-[11px] text-stone-500">
+        <span className="inline-flex items-baseline gap-2 min-w-0">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0" style={{ color: SERIES_COLOR.tmax.median }}>
+            <SeriesSwatch color={SERIES_COLOR.tmax.p25p75} />
+            最高
+          </span>
+          <span className="font-mono tabular-nums text-[11px] text-stone-500">
             {tmax.p10.toFixed(1)}〜{tmax.p90.toFixed(1)}
           </span>
+        </span>
+        <span className="flex items-baseline gap-1.5 font-mono tabular-nums shrink-0">
           <span className="text-[10px] text-stone-400">中央</span>
           <span className="text-lg font-bold leading-none" style={{ color: SERIES_COLOR.tmax.median }}>
             {tmax.p50.toFixed(1)}
@@ -133,14 +135,16 @@ export function TempRibbonBand({ tmax, tmin, domain, thresholds }: Props) {
         </span>
       </div>
       <div className="flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium" style={{ color: SERIES_COLOR.tmin.median }}>
-          <SeriesSwatch color={SERIES_COLOR.tmin.p25p75} />
-          最低
-        </span>
-        <span className="flex items-baseline gap-2 font-mono tabular-nums">
-          <span className="text-[11px] text-stone-500">
+        <span className="inline-flex items-baseline gap-2 min-w-0">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium shrink-0" style={{ color: SERIES_COLOR.tmin.median }}>
+            <SeriesSwatch color={SERIES_COLOR.tmin.p25p75} />
+            最低
+          </span>
+          <span className="font-mono tabular-nums text-[11px] text-stone-500">
             {tmin.p10.toFixed(1)}〜{tmin.p90.toFixed(1)}
           </span>
+        </span>
+        <span className="flex items-baseline gap-1.5 font-mono tabular-nums shrink-0">
           <span className="text-[10px] text-stone-400">中央</span>
           <span className="text-lg font-bold leading-none" style={{ color: SERIES_COLOR.tmin.median }}>
             {tmin.p50.toFixed(1)}

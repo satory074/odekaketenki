@@ -76,14 +76,16 @@ export function RibbonBand({ label, unit, percentiles, domain, thresholds, axis 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-700">
-          <SeriesSwatch color={colors.p25p75} />
-          {label}
-        </span>
-        <span className="flex items-baseline gap-2 font-mono tabular-nums">
-          <span className="text-[11px] text-stone-500">
+        <span className="inline-flex items-baseline gap-2 min-w-0">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-700 shrink-0">
+            <SeriesSwatch color={colors.p25p75} />
+            {label}
+          </span>
+          <span className="font-mono tabular-nums text-[11px] text-stone-500">
             {percentiles.p10.toFixed(1)}〜{percentiles.p90.toFixed(1)}
           </span>
+        </span>
+        <span className="flex items-baseline gap-1.5 font-mono tabular-nums shrink-0">
           <span className="text-[10px] text-stone-400">中央</span>
           <span className="text-lg font-bold leading-none" style={{ color: colors.median }}>
             {percentiles.p50.toFixed(1)}
