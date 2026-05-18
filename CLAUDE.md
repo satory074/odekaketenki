@@ -122,7 +122,7 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 - **`lib/recent-places.ts`** — `localStorage` の薄いラッパー（`loadRecentPlaces` / `saveRecentPlace` / `clearRecentPlaces`）。SSR セーフ、quota エラーは `try/catch` で握りつぶす。
 
 ### カレンダーと詳細
-- **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー。`viewYear` / `viewMonth` / `onChangeView` を親から受ける純粋プレゼンテーション。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる。各セルに `monthData?.get(date)` から取り出した `{score, rainProb}` を**左色帯（emerald ≥75 / amber 50-74 / rose <50）と下端ミニ雨日バー（indigo, 雨日割合 × 100%）**として重ねる（CLAUDE.md 動的色は inline `style={{ backgroundColor }}` を使うルール準拠）。tap target 確保のため `min-h-12 sm:min-h-14`、月送り `‹` `›` は `h-10 w-10` の丸ボタン（`ChevronLeftIcon` / `ChevronRightIcon`）。`focus-visible:ring-2 focus-visible:ring-sky-500` を全インタラクティブ要素に統一。
+- **`components/Calendar.tsx`** — 依存ゼロの月次カレンダー。`viewYear` / `viewMonth` / `onChangeView` を親から受ける純粋プレゼンテーション。7列グリッドは Tailwind `grid-cols-7` ではなく **inline `style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}`** で当てる。各セルに `monthData?.get(date)` から取り出した `{score, rainProb}` を**左色帯（emerald ≥75 / amber 50-74 / rose <50）と下端ミニ雨日バー（indigo, 雨日割合 × 100%）**として重ねる（CLAUDE.md 動的色は inline `style={{ backgroundColor }}` を使うルール準拠）。tap target 確保のため `min-h-12 sm:min-h-14`、月送り `‹` `›` は `h-10 w-10` の丸ボタン（`ChevronLeftIcon` / `ChevronRightIcon`）。`focus-visible:ring-2 focus-visible:ring-sky-500` を全インタラクティブ要素に統一。日付数字の直下に **六曜ラベル**（`text-[10px]`、大安=`text-rose-500 font-semibold` で強調・仏滅=`text-slate-400` で控えめ・他=`text-slate-500`、選択時は `text-white/80`）を表示。月外セルには六曜を出さない（視認性優先）。
 - **`components/HeroBlock.tsx`** — `DateDetailPanel` の先頭ブロック。日付の日本語フォーマット（曜日付き）+ 総合スコア **`text-5xl sm:text-6xl font-bold tabular-nums`** + tier ラベル（emerald「比較的良好」/ amber「やや注意」/ rose「要注意」）+ コメント本文。背景は `bg-gradient-to-br` で tier 色（emerald-50 → emerald-100 等）。
 - **`components/DateDetailPanel.tsx`** — 詳細パネル。**縦並びは重要度降順**（ヒーロー → 集計根拠 → 要約カード → 主役の降水量構成 → 気温分布 → 風速 → 折りたたみ詳細2つ）。主役の section は `border-2 border-indigo-200` + 左に `w-1 bg-indigo-500` の縦帯 + 「主役」バッジで意図的に強調。新しいセクションを追加する際もこの優先順位を維持し、主役（降水量の構成）を中央より下に押し下げないこと。
 - **`components/charts/*`** — 依存ゼロの純 SVG / テーブルプリミティブ 4種:
@@ -149,6 +149,9 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 ### なぜルールベースコメントか
 Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3）出力ぶれの3点でMVPに不向きと判断。閾値ベースの優先度ロジック（`lib/comments.ts` の `pickPrimary`）で、雨/暑さ/寒さ/風から最もリスクの高い1つを軸に1〜2文を組み立てる。
 
+### なぜ六曜は Python 事前計算 + TS テーブル埋め込みか
+六曜は旧暦の月と日から `(月+日)%6` で機械的に決まるが、肝心の **旧暦変換が天文計算依存**（朔・中気の正確な時刻が必要、閏月判定もある）。PyPI にも NPM にも信頼できる現役メンテのライブラリが見当たらず、`koyomi`(PyPI) は二十四節気のみ、`lunardate` は中国旧暦で日本暦と微妙にずれる。そこで `scripts/build_rokuyou.py` で Meeus 簡易公式（高野英資の qreki アルゴリズム流）を自前実装し、**2010–2060 の 51 年分を事前計算して `lib/rokuyou-table.ts` に 1 文字 1 日のエンコード文字列として埋め込む**（合計約 18KB、gzip 後 ~4KB）。ランタイムは O(1) の文字列インデックス参照のみで、`monthData` のような async fetch を増やさず Calendar の同期レンダーに収まる。検証は Wikipedia の (旧暦月+日)%6 → 0=大安・1=赤口・2=先勝・3=友引・4=先負・5=仏滅 公式に合致することと、複数年の旧暦元日が必ず「先勝」になることで担保。
+
 ## 非自明な実装ポイント
 
 - **`lib/aggregate.ts`** — ±7日のキー計算は閏年を避けるため `2001` を基準年に固定して date math。集計結果は欠損値を除外して算術平均、`n` でサンプル数を返す。1パスのループで全集計を行うため、`tmaxDist` 等の percentile 計算用配列も同時に貯める。
@@ -167,6 +170,7 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **`scripts/fetch_jma.py`** — JMA「サーバ高頻度アクセス禁止」遵守のため 3秒+ジッタ + 指数バックオフ。HTML月次表（`table#tablefix1`）を BeautifulSoup でパース。`_build_field_map()` がヘッダー行の rowspan/colspan を展開して動的に column→field マッピングを構築するため、s1 (synoptic, 4ヘッダー行 21+列) と a1 (AMeDAS, 3ヘッダー行 4-18列) の両方を共通ロジックで処理。`.cache/<station>/<year>-<mm>.html` にキャッシュし再開可能。`StationRef.kind` で `daily_s1.php` / `daily_a1.php` を切替。
 - **`scripts/discover_stations.py`** — JMA 都府県別 select ページ（`prefecture.php?prec_no=<n>`）から `viewPoint('<kind>','<block_no>','<name>','<kana>',<lat_d>,<lat_m>,<lng_d>,<lng_m>,...)` JS呼び出しを正規表現抽出 → `pykakasi` で漢字→ローマ字（passport式: 東京→tokyo）スラグ生成 → `discover_output.py` に Python リテラルで吐き出して `jma_stations.STATIONS` にマージ。北海道（11–24）は14のサブ地域 prec_no を `北海道` に統合。重複スラグは `<slug>-<prec_no>-<block_no>` で disambiguate。再実行は `.cache/discover/` のキャッシュで爆速。
 - **`scripts/seed_dev_data.mjs`** — 緯度ベースの簡易気候モデルで `public/data/stations.json` にある全地点（現状159）の合成データを生成。peak phase は `doy=215`（早August）に固定。実JMA取得後は上書きされる（**現状は s1 159地点とも実データに差し替え済み**）。
+- **`scripts/build_rokuyou.py` / `lib/rokuyou.ts`** — 旧暦変換は Meeus 簡易公式で太陽・月の視黄経を求め、朔（黄経差 0）と中気（太陽黄経 30°刻み）を Newton 法で反復近似。`_build_lunar_year(year)` が冬至を含む朔を旧暦11月とし、その後の各朔について「中気を含むか」で月番号を決定（含まない月が閏月）。**ハマりどころ**: 太陽黄経の係数表で「t に比例する項」を識別するフラグ（koyomi.py の `sl[3]`）を移植する際、t 補正係数を `(t-1)*0.0200+1` のような別公式と混同すると太陽黄経が ~190° ずれる（実害テスト 2024-01-01 で 280° → 94° に化けた経緯あり）。正しい補正は `tflag=1` のとき `amp * t`、`tflag=0` のとき `amp`。六曜の数値→ラベル対応も罠で、旧暦1月1日 = (1+1)%6 = 2 が **先勝** にマップされる必要があるため `INDEX_TO_KEY = ["taian","shakkou","senshou","tomobiki","senbu","butsumetsu"]` の順（Wikipedia 公式と一致）。Meeus 簡易公式の精度は新月時刻 ±0.4 日程度で、JST 0:00 をまたぐ稀なケースでは月境界が 1 日ずれうるが、検算した範囲（2024–2026 旧暦元日 3 件）では国立天文台と一致。
 
 ## TypeScript / Lint 規約
 
@@ -183,6 +187,7 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 
 - **気象庁オープンデータ**: 商用利用可。フッターに「気象庁データを加工して利用」のクレジットを表示。obsdlへの高頻度アクセスは禁止されているため、事前バッチ + キャッシュで運用。
 - **Open-Meteo Geocoding API**: CC-BY 4.0。無料、APIキー不要、商用利用可。
+- **六曜**: 旧暦変換のロジックは Meeus の天文公式（数式は public domain）を `scripts/build_rokuyou.py` に自前実装。六曜の (月+日)%6 公式は伝統暦で著作権なし。生成された `lib/rokuyou-table.ts` は本プロジェクトのソース扱い。
 
 ## 既知の制約
 
