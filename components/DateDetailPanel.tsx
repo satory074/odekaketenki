@@ -16,6 +16,8 @@ function pct(p: number): string {
 export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
   const { stats, scores, comment } = result;
 
+  const candidateSamples = stats.samples.filter((s) => s.offset === 0);
+
   const tempBounds = [
     stats.tmaxDist.p10,
     stats.tmaxDist.p90,
@@ -192,7 +194,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
       {/* ⑧ 全観測データ一覧（折りたたみ） */}
       <details className="group rounded-xl border border-slate-200 bg-white shadow-sm">
         <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-600 hover:bg-slate-50">
-          <span>全観測データ一覧（{stats.samples.length}件）</span>
+          <span>候補日の過去観測（{candidateSamples.length}件）</span>
           <span
             aria-hidden="true"
             className="text-slate-400 transition-transform group-open:rotate-180"
@@ -201,7 +203,7 @@ export function DateDetailPanel({ result }: { result: DiagnoseResult }) {
           </span>
         </summary>
         <div className="border-t border-slate-100 px-5 py-4">
-          <SamplesTable samples={stats.samples} yearRange={stats.yearRange} />
+          <SamplesTable samples={candidateSamples} yearRange={stats.yearRange} />
         </div>
       </details>
     </div>
