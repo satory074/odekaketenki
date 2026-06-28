@@ -46,11 +46,29 @@ export default function RootLayout({
           content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://geocoding-api.open-meteo.com; object-src 'none'; base-uri 'self'; form-action 'self';"
         />
       </head>
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased pb-12">
         <a href="#main-content" className="skip-to-content">
           メインコンテンツへスキップ
         </a>
         {children}
+        {/* サイト間ナビ: 画面下端に常駐する控えめな逆リンクバー（→ satory074.com/apps） */}
+        <nav
+          aria-label="サイト間ナビゲーション"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/85 backdrop-blur"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <div className="mx-auto flex h-9 max-w-screen-2xl items-center justify-center px-4">
+            <a
+              href="https://satory074.com/apps/"
+              target="_blank"
+              rel="noopener"
+              aria-label="satory074 のほかのアプリ一覧を新しいタブで開く"
+              className="inline-flex items-center gap-1 text-xs text-slate-600 transition-colors hover:text-sky-700"
+            >
+              satory074 のほかのアプリ <span aria-hidden>↗</span>
+            </a>
+          </div>
+        </nav>
       </body>
     </html>
   );

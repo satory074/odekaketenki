@@ -49,16 +49,6 @@ export function AppShell({
             </a>
           </p>
           <p>
-            <a
-              href="https://satory074.com/apps/"
-              className="underline underline-offset-2 transition-colors hover:text-sky-700"
-              target="_blank"
-              rel="noopener"
-            >
-              アプリ一覧へ
-            </a>
-          </p>
-          <p>
             ※ 任意地点の入力を最寄りの観測地点に割り当てて集計しています。表示値は参考値です。
           </p>
           <p>
