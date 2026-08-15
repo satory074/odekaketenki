@@ -63,7 +63,7 @@ export default function RootLayout({
               target="_blank"
               rel="noopener"
               aria-label="satory074 のほかのアプリ一覧を新しいタブで開く"
-              className="inline-flex items-center gap-1 text-xs text-slate-600 transition-colors hover:text-sky-700"
+              className="inline-flex h-full items-center gap-1 px-3 text-xs text-slate-600 transition-colors hover:text-sky-700"
             >
               satory074 のほかのアプリ <span aria-hidden="true">↗</span>
             </a>
