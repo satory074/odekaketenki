@@ -29,6 +29,9 @@ jobs:
         env:
           NEXT_PUBLIC_BASE_PATH: /odekaketenki
         run: npm run build
+      # 検索・AI クローラー向けの不変条件 (canonical・サイトマップ・JSON-LD・サイト内リンク)。破ったら deploy しない
+      - name: SEO check
+        run: node scripts/seo-check.mjs out https://satory074.github.io/odekaketenki/ --require-backlink
       - name: Add .nojekyll
         run: touch out/.nojekyll
       - uses: actions/configure-pages@v5

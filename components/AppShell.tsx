@@ -1,10 +1,16 @@
+import Link from "next/link";
 import { AppHeader } from "./AppHeader";
+
+// 集計に使っている年。next.config.ts がデータ (public/data/jma) から入れるので、年次更新で自動的に変わる
+const DATA_YEARS = process.env.NEXT_PUBLIC_DATA_YEARS ?? "";
 
 type Props = {
   children: React.ReactNode;
   headerSearch?: React.ReactNode;
   headerPlaceBadge?: React.ReactNode;
   headerActions?: React.ReactNode;
+  /** AppHeader のアプリ名の要素 (ページ自身の h1 を持つページでは "p") */
+  titleAs?: "h1" | "p";
 };
 
 export function AppShell({
@@ -12,6 +18,7 @@ export function AppShell({
   headerSearch,
   headerPlaceBadge,
   headerActions,
+  titleAs,
 }: Props) {
   return (
     <div className="flex min-h-screen flex-col">
@@ -19,6 +26,7 @@ export function AppShell({
         searchSlot={headerSearch}
         placeBadge={headerPlaceBadge}
         actions={headerActions}
+        titleAs={titleAs}
       />
       <main
         id="main-content"
@@ -52,7 +60,15 @@ export function AppShell({
             ※ 任意地点の入力を最寄りの観測地点に割り当てて集計しています。表示値は参考値です。
           </p>
           <p>
-            ※ 集計範囲: 候補日±7日 × 過去30年（1995–2024）。分布バンドは P10–P90、太色帯は P25–P75、縦線は中央値。
+            ※ 集計範囲: 候補日±7日 × 過去30年（{DATA_YEARS}）。分布バンドは P10–P90、太色帯は P25–P75、縦線は中央値。
+          </p>
+          <p>
+            <Link
+              href="/stations/"
+              className="underline underline-offset-2 transition-colors hover:text-sky-700"
+            >
+              観測地点ごとの月別の天気統計
+            </Link>
           </p>
         </div>
       </footer>

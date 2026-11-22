@@ -7,10 +7,10 @@ import type {
   StationData,
 } from "./types";
 
-const RAIN_MM = 1.0;
-const HEAVY_RAIN_MM = 30.0;
-const HOT_C = 30.0;
-const COLD_C = 5.0;
+export const RAIN_MM = 1.0;
+export const HEAVY_RAIN_MM = 30.0;
+export const HOT_C = 30.0;
+export const COLD_C = 5.0;
 
 function mmdd(date: Date): string {
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");

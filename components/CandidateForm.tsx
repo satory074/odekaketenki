@@ -8,6 +8,7 @@ import {
   prepareLocationFromStation,
   type LocationContext,
 } from "@/lib/diagnose";
+import { loadStations } from "@/lib/stations";
 import type { DiagnoseResult, Station } from "@/lib/types";
 import { AppShell } from "./AppShell";
 import { Calendar } from "./Calendar";
@@ -79,6 +80,36 @@ export function CandidateForm() {
     setDiagnosis(null);
     setError(null);
   }, []);
+
+  // 地点ページ (/stations/<id>/) の「この地点で日付を選ぶ」から `?station=<id>` で来たら、
+  // 観測地点ボタンで選んだのと同じ状態で始める。useSearchParams は静的書き出しで Suspense 境界が
+  // 要るので使わず、マウント後に window.location を読む。読んだらクエリは消す (別の地点に替えた後の
+  // 再読み込みで元の地点に戻らないように)。知らない id は無視して、いつもの初期画面のまま。
+  useEffect(() => {
+    const stationId = new URLSearchParams(window.location.search).get("station");
+    if (!stationId) return;
+    let cancelled = false;
+    loadStations()
+      .then((list) => {
+        if (cancelled) return;
+        window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+        const s = list.find((x) => x.id === stationId);
+        if (!s) return;
+        setSelected({
+          name: s.name,
+          lat: s.lat,
+          lng: s.lng,
+          prefecture: s.prefecture,
+          source: "station",
+          stationId: s.id,
+        });
+        resetLocationState();
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [resetLocationState]);
 
   useEffect(() => {
     if (!selected) return;

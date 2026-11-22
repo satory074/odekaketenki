@@ -18,7 +18,10 @@ npm run dev      # 開発サーバー (http://localhost:3000)
 npm run build    # `output: "export"` で out/ に静的書き出し
 npm run lint     # ESLint
 NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build  # GitHub Pages 用 (/odekaketenki サブパス)
+node scripts/seo-check.mjs out https://satory074.github.io/odekaketenki/ --require-backlink  # ビルド後の SEO 不変条件 (deploy.yml でも実行)
 ```
+
+本番と同じパスで確かめるときは `out/` を一時ディレクトリの `odekaketenki/` にコピーし、その親を `python3 -m http.server 3100` で配信して `http://localhost:3100/odekaketenki/` を開く。
 
 ### データインジェスト (Python uv, scripts/)
 ```bash
@@ -65,10 +68,23 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 
 [public/data/]
    ├─ stations.json       → 159地点のID/名前/緯度経度/都道府県 (s1 のみ)
-   └─ jma/<id>.json       → 各地点の30年分日次データ (mm-dd → 年配列、約 320KB × 159 ≈ 70MB)
+   └─ jma/<id>.json       → 各地点の30年分日次データ (mm-dd → 年配列、約 450KB × 159 ≈ 70MB)
 ```
 
 **完全クライアント側**：API ルートは存在しない（GitHub Pages 静的ホスティング向け）。Open-Meteo Geocoding はブラウザから CORS で直叩き。観測点データは `public/data/` から `fetch()`、ブラウザ内 `Map` でプロセス内キャッシュ。
+
+### 観測地点ページ（`/stations/` と `/stations/<id>/`、検索・AI クローラー向けの静的ページ）
+
+トップ（`/`）は場所を選ぶまで中身が出ないので、地点ごとの統計を **JS なしで読める HTML** として書き出している。
+- `app/stations/[id]/page.tsx`（`generateStaticParams` + `dynamicParams = false`）が **ビルド時に `fs` で** `public/data/jma/<id>.json` を読み（`lib/station-pages.ts`）、`lib/station-summary.ts`（純粋関数）で要約した数字だけを描く。client component を置かないので、約 460KB の日別データは HTML にも RSC（`.txt`）にも載らない（1 ページ HTML 約 74KB・gzip 約 10KB）。
+- 中身: 月別の表（雨の日 1mm 以上 / 大雨 30mm 以上 / 平均最高・最低 / 30℃以上・5℃以下の日 / 日照 / 風速 / アプリの総合スコアの月平均）、安定しやすい週・崩れやすい週（1 年 365 日それぞれにアプリと同じ `aggregateAroundDate`（±7 日）+ `score()` を回し、連続 7 日の平均で上位・下位を重ならないよう 3 つずつ。同点は雨の日の割合で順位付け）、近くの 5 地点（`haversineKm`）。閾値は `lib/aggregate.ts` から export したものを使い、アプリと数字が食い違わないようにしている。
+- **2/29**: `aggregate.ts` は平年 2001 年で日付を計算するので、2/29 を選ぶと 3/1 の窓になる（アプリの既存挙動）。週の計算は平年の 365 日で回し、月別の表は 2 月の全観測日（うるう年の 2/29 も含む）を数える。
+- **ページを作る地点**: 降水量と最高気温が 330 日以上そろった年が 20 年以上ある地点だけ（`MIN_FULL_YEARS`）。2026-11 時点で 159 地点中 154。作らないのは富士山 ×2（降水量を観測していない。山梨・静岡で同じ観測所が 2 件登録されている）、伊吹山・剣山（2001 年に観測終了）、阿蘇山（2017 年ごろまで）。アプリの地点ピッカーにはこれまでどおり全 159 地点が出る。
+- **ビルドを止める不変条件**: 掲載地点の降水量の欠測率の中央値が 10% を超えたら throw する（`lib/station-pages.ts`）。気象庁の `--`（降水なし）を欠測として取り込む不具合（下の fetch_jma.py の項）が戻ると、雨の日の割合が約 2 倍のまま公開されるため。
+- アプリへのリンクは `/?station=<id>`。`CandidateForm` がマウント後に `window.location` を読んで観測地点ボタンと同じ状態で始め、クエリは `history.replaceState` で消す（`useSearchParams` は静的書き出しで Suspense 境界が要るので使わない）。
+- `<head>` は `lib/site.tsx` の `pageMetadata()`（canonical = og:url = 絶対 URL・末尾 `/`、OG 画像は共通の `og-image.png`）と `JsonLd`（トップ `WebSite`、一覧 `CollectionPage`、地点 `WebPage` + パンくず、author は `https://satory074.com/#person`）。`AppHeader` の h1 はトップだけで、地点ページ・一覧・404 は `titleAs="p"` にしてページ自身の h1 を持つ。
+- `app/sitemap.ts` / `app/robots.ts`（`force-static`）。github.io のプロジェクトサイトなので、クローラーが読む robots.txt は `https://satory074.github.io/robots.txt`（別リポジトリ）の方。サイトマップの URL はそちらに書く。
+- フッターの「集計範囲」の年は `next.config.ts` がデータから `NEXT_PUBLIC_DATA_YEARS` に入れる（以前は「1995–2024」と書いてあり、データの 1996–2025 とずれていた）。
 
 ### 主要ファイル索引
 
@@ -95,6 +111,12 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 | `lib/regions.ts` | `prefecture → Region`（6分類）の純データ |
 | `lib/asset-path.ts` | `NEXT_PUBLIC_BASE_PATH` 前置ヘルパー |
 | `lib/types.ts` | 共有型 (`Aggregated` / `ScoreReport` / `StationData` …) |
+| `app/stations/[id]/page.tsx` / `app/stations/page.tsx` | 観測地点ページと一覧（ビルド時に静的生成） |
+| `app/sitemap.ts` / `app/robots.ts` / `app/not-found.tsx` | サイトマップ・robots・404 |
+| `lib/station-summary.ts` | 地点ページの要約（月別の表・良い週/悪い週。純粋関数） |
+| `lib/station-pages.ts` | 地点ページのビルド時専用の読み込み（`fs`）・掲載地点の選別・不変条件 |
+| `lib/site.tsx` | 公開 URL・`pageMetadata()`・`JsonLd`・作者 |
+| `scripts/seo-check.mjs` | ビルド結果の SEO 不変条件の検査（原本は basecamp リポジトリ。中身は変えずにコピー） |
 | `scripts/fetch_jma.py` | obsdl HTML 月次表のスクレイピング (uv) |
 | `scripts/build_dataset.py` | `.cache/` → `public/data/jma/*.json` 変換 + `stations.json` 生成 |
 | `scripts/discover_stations.py` | JMA select ページ巡回→地点レジストリ再構築 |
@@ -106,7 +128,7 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 - 本番URL: **https://satory074.github.io/odekaketenki/**
 - リポジトリ: https://github.com/satory074/odekaketenki
 
-`.github/workflows/deploy.yml` が `main` push をトリガに `NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build` → `actions/deploy-pages` で配信。CSP は `app/layout.tsx` の `<meta http-equiv="Content-Security-Policy">` で実装（GitHub Pages はカスタムヘッダー不可のため）。Pages の Source は「GitHub Actions」を選択する設定（branch deploy ではない）。
+`.github/workflows/deploy.yml` が `main` push をトリガに `NEXT_PUBLIC_BASE_PATH=/odekaketenki npm run build` → `scripts/seo-check.mjs`（破ったら deploy しない）→ `actions/deploy-pages` で配信。ブランチの push では deploy は走らない。CSP は `app/layout.tsx` の `<meta http-equiv="Content-Security-Policy">` で実装（GitHub Pages はカスタムヘッダー不可のため）。Pages の Source は「GitHub Actions」を選択する設定（branch deploy ではない）。
 
 ## 可視化レイヤ
 
@@ -179,11 +201,15 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 - **strict mode** 有効。`any` は error。
 - パスエイリアス: `@/*` → リポジトリルート。
 - Next.js flat ESLint config。`react-hooks/set-state-in-effect` がデフォルト error なので、useEffect の中で同期 setState を呼ばないこと（debounce timer の中で呼ぶ等）。
-- **静的エクスポート前提**: `app/api/` は使わない。Server Component から `fs` を読むのも避け（`output: "export"` 時にエラー）、`lib/*` は全て fetch ベースのブラウザ実行可能コードにする。`use client` はインタラクション・状態管理が必要なもののみ（`CandidateForm` / `Calendar` / `Sheet` / `SearchCombobox` / `StationPicker`）。`DateDetailPanel` / `HeroBlock` / `AppShell` / `AppHeader` / `charts/*` / `icons` は静的レンダリング可能なまま保つ。
+- **静的エクスポート前提**: `app/api/` は使わない。ブラウザで動くアプリ側の `lib/*` は fetch ベースのまま保つ。例外は **ビルド時にだけ評価される** 地点ページ・サイトマップで、`lib/station-pages.ts` が `fs` で `public/data` を読む（`output: "export"` の静的生成で問題なく動く）。このファイルを client component から import しないこと。`use client` はインタラクション・状態管理が必要なもののみ（`CandidateForm` / `Calendar` / `Sheet` / `SearchCombobox` / `StationPicker`）。`DateDetailPanel` / `HeroBlock` / `AppShell` / `AppHeader` / `charts/*` / `icons` は静的レンダリング可能なまま保つ。
 
 ## テストスイート
 
-無し。`npm test` 等は未定義。検証は `npm run build`（型チェック）+ `npm run lint` + ブラウザ手動確認の3点で行う。
+`npm test` は無い。テストの件数は増やさず、壊れたら困る不変条件だけをビルドに置いている:
+- `scripts/seo-check.mjs`（deploy.yml のビルド直後）: タイトル・説明文が重複しない / canonical = og:url = 自分の URL / サイトマップ = noindex でないページ / JSON-LD の作者 / サイト内リンクが実在
+- `lib/station-pages.ts`: 降水量の欠測率の中央値が 10% 以下（気象庁の `--` の取り込みが壊れていない）
+
+ほかは `npm run build`（型チェック）+ `npm run lint` + ブラウザ手動確認で行う。
 
 ## データソースとライセンス
 
@@ -197,6 +223,7 @@ Gemini 等のLLM呼び出しは（1）コスト、（2）レイテンシ、（3�
 2. **用途別スコアなし** — MVP汎用スコアのみ。結婚式/前撮り/キャンプ別の重み付けは未実装。
 3. **±2週間ランキング未実装** — 候補日のピンポイント比較のみ。
 4. **台風接近傾向データなし** — 別データソース要。
+5. **観測所の移転を補正していない** — 気象庁の生の日別値をそのまま使っている（平年値のような移転補正なし）。例: 東京は 2014 年 12 月に大手町→北の丸公園へ移り、1 月の最低気温の平均が 2014 年以前は約 2.7℃、2015 年以降は約 1.9℃。地点ページの月別の値は両方を混ぜた平均。
 
 ## 拡張のヒント
 

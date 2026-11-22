@@ -4,9 +4,12 @@ type Props = {
   searchSlot?: React.ReactNode;
   placeBadge?: React.ReactNode;
   actions?: React.ReactNode;
+  /** アプリ名の要素。トップは h1、地点ページなどページ自身の h1 を持つページでは "p" */
+  titleAs?: "h1" | "p";
 };
 
-export function AppHeader({ searchSlot, placeBadge, actions }: Props) {
+export function AppHeader({ searchSlot, placeBadge, actions, titleAs = "h1" }: Props) {
+  const Title = titleAs;
   return (
     <header
       role="banner"
@@ -24,9 +27,9 @@ export function AppHeader({ searchSlot, placeBadge, actions }: Props) {
           >
             <BrandMark />
           </span>
-          <h1 className="text-sm font-semibold tracking-tight text-slate-900 sm:text-base">
+          <Title className="text-sm font-semibold tracking-tight text-slate-900 sm:text-base">
             お出かけ天気ナビ
-          </h1>
+          </Title>
         </Link>
 
         {placeBadge && (
