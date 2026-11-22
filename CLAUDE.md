@@ -76,7 +76,7 @@ node scripts/seed_dev_data.mjs   # stations.json にある全地点分の合成�
 ### 観測地点ページ（`/stations/` と `/stations/<id>/`、検索・AI クローラー向けの静的ページ）
 
 トップ（`/`）は場所を選ぶまで中身が出ないので、地点ごとの統計を **JS なしで読める HTML** として書き出している。
-- `app/stations/[id]/page.tsx`（`generateStaticParams` + `dynamicParams = false`）が **ビルド時に `fs` で** `public/data/jma/<id>.json` を読み（`lib/station-pages.ts`）、`lib/station-summary.ts`（純粋関数）で要約した数字だけを描く。client component を置かないので、約 460KB の日別データは HTML にも RSC（`.txt`）にも載らない（1 ページ HTML 約 74KB・gzip 約 10KB）。
+- `app/stations/[id]/page.tsx`（`generateStaticParams` + `dynamicParams = false`）が **ビルド時に `fs` で** `public/data/jma/<id>.json` を読み（`lib/station-pages.ts`）、`lib/station-summary.ts`（純粋関数）で要約した数字だけを描く。client component を置かないので、約 460KB の日別データは HTML にも RSC（`.txt`）にも載らない（1 ページ HTML 約 74KB・gzip 約 10KB。RSC ファイル込みで地点ページ全体 約 31MB、`out/` 全体は 2026-11 時点で約 105MB）。
 - 中身: 月別の表（雨の日 1mm 以上 / 大雨 30mm 以上 / 平均最高・最低 / 30℃以上・5℃以下の日 / 日照 / 風速 / アプリの総合スコアの月平均）、安定しやすい週・崩れやすい週（1 年 365 日それぞれにアプリと同じ `aggregateAroundDate`（±7 日）+ `score()` を回し、連続 7 日の平均で上位・下位を重ならないよう 3 つずつ。同点は雨の日の割合で順位付け）、近くの 5 地点（`haversineKm`）。閾値は `lib/aggregate.ts` から export したものを使い、アプリと数字が食い違わないようにしている。
 - **2/29**: `aggregate.ts` は平年 2001 年で日付を計算するので、2/29 を選ぶと 3/1 の窓になる（アプリの既存挙動）。週の計算は平年の 365 日で回し、月別の表は 2 月の全観測日（うるう年の 2/29 も含む）を数える。
 - **ページを作る地点**: 降水量と最高気温が 330 日以上そろった年が 20 年以上ある地点だけ（`MIN_FULL_YEARS`）。2026-11 時点で 159 地点中 154。作らないのは富士山 ×2（降水量を観測していない。山梨・静岡で同じ観測所が 2 件登録されている）、伊吹山・剣山（2001 年に観測終了）、阿蘇山（2017 年ごろまで）。アプリの地点ピッカーにはこれまでどおり全 159 地点が出る。
