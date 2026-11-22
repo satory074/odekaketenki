@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
+import { OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
-const SITE_URL = "https://satory074.github.io/odekaketenki";
-const OG_IMAGE = `${SITE_URL}/og-image.png`;
-
+// 全ページ共通の既定値。canonical と og:url はページごとに pageMetadata() (lib/site.tsx) で付ける
+// (ここに書くと 404 にもトップの canonical が付いてしまう)。
+// robots は既定 (index, follow) のまま書かない。書くと 404 に noindex と index が両方出る。
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "お出かけ天気ナビ — 過去30年の天気から日取りを決める",
   description:
     "結婚式やお出かけの日程を決めるとき、候補日の過去30年の天気統計を比較して、雨・暑さ・寒さ・風のリスクを可視化します。",
   openGraph: {
-    title: "お出かけ天気ナビ",
+    title: SITE_NAME,
     description: "過去30年の天気統計で、日取りを決める。",
     type: "website",
     locale: "ja_JP",
-    url: SITE_URL,
+    siteName: SITE_NAME,
     images: [
       {
         url: OG_IMAGE,
@@ -26,11 +28,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "お出かけ天気ナビ",
+    title: SITE_NAME,
     description: "過去30年の天気統計で、日取りを決める。",
     images: [OG_IMAGE],
   },
-  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
