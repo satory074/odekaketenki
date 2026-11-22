@@ -61,6 +61,21 @@ def fetch_month_html(client: httpx.Client, station: StationRef, year: int, month
     return resp.text
 
 
+# JMA の表で "--" は「該当現象なし」(欠測ではない)。降水量なら 0mm、日照時間なら 0 時間
+# (2008 年ごろまでの日照時間は 0 を "--" で書いている)。これを欠測扱いにすると雨の降らない日が
+# 分母から消え、雨の日の割合が約 2 倍になる (2026-11 に東京で 52% → 実際は 28%)。
+# "-- )" (準正常値) / "-- ]" (資料不足値) も同じく 0 にする (数値の後ろの ")" "]" を残すのと同じ扱い)。
+# 観測していない項目は空欄 / "///"、欠測は "×" なので、これまでどおり None。
+NO_PHENOMENON_IS_ZERO = ("prcp", "sunshine")
+
+
+def _parse_value(field: str, s: str) -> float | None:
+    if field in NO_PHENOMENON_IS_ZERO and s is not None:
+        if s.strip().replace("\xa0", "").startswith("--"):
+            return 0.0
+    return _parse_float(s)
+
+
 def _parse_float(s: str) -> float | None:
     if s is None:
         return None
@@ -197,7 +212,7 @@ def parse_month_table(html: str) -> dict[int, dict[str, float | None]]:
         record: dict[str, float | None] = {f: None for f in FIELDS}
         for col_idx, field in field_map.items():
             if col_idx < len(cells):
-                record[field] = _parse_float(cells[col_idx].get_text())
+                record[field] = _parse_value(field, cells[col_idx].get_text())
         out[day] = record
     return out
 
